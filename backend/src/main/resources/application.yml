@@ -1,0 +1,44 @@
+spring:
+  application:
+    name: booking
+  datasource:
+    url: ${DB_URL:jdbc:postgresql://localhost:5432/booking}
+    username: ${DB_USER:booking}
+    password: ${DB_PASSWORD:booking}
+    driver-class-name: org.postgresql.Driver
+  flyway:
+    enabled: true
+  jooq:
+    sql-dialect: postgres
+  security:
+    # Статическая конфигурация отключена — управляется кодом (SecurityConfig)
+    user:
+      name: disabled
+      password: disabled
+
+# Конфигурация инсталляции (переопределяется через env)
+booking:
+  owner-tz: ${OWNER_TZ:Asia/Yerevan}
+  working-hours: ${WORKING_HOURS:09:00-18:00}
+  slot-minutes: ${SLOT_MINUTES:30}
+  horizon-days: ${BOOKING_HORIZON_DAYS:31}
+
+# Сгенерированные интерфейсы имеют @RequestMapping("${api.base-path:/api/v1}").
+# context-path уже добавляет /api/v1 — чтобы не было двойного префикса,
+# зануляем api.base-path здесь.
+api:
+  base-path: ""
+
+server:
+  servlet:
+    context-path: /api/v1
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+      base-path: /actuator
+  endpoint:
+    health:
+      show-details: never

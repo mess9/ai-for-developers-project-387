@@ -1,0 +1,577 @@
+openapi: 3.0.3
+
+info:
+  title: Booking Service API
+  version: 1.0.0
+  description: |
+    API сервиса «Запись на звонок» — упрощённая вариация Cal.com.
+
+    Владелец (один на инсталляцию) публикует доступное время; анонимный посетитель
+    по публичной ссылке бронирует свободный 30-мин слот.
+
+    ## Идентификаторы
+    - **Слот** идентифицируется своим `startAt` (момент времени, UTC-инстант).
+    - **Бронь** идентифицируется `id` (UUID).
+
+    ## Время
+    Все моменты времени на проводе — ISO-8601 `OffsetDateTime` (со смещением).
+    Часовой пояс владельца отдаётся отдельным полем (`ownerTimeZone`, IANA-имя),
+    т.к. смещение не несёт имени зоны. Группировка слотов по дням — в часовом
+    поясе владельца.
+
+    ## Ошибки
+    Ошибки — RFC 9457 ProblemDetail (`application/problem+json`) с машиночитаемым
+    `errorCode` и (для валидации) массивом `errors[]`.
+
+servers:
+  - url: /api/v1
+    description: Базовый путь API (версия 1)
+
+tags:
+  - name: public
+    description: Публичные эндпоинты (без авторизации)
+  - name: admin
+    description: Эндпоинты владельца (Bearer-токен)
+
+paths:
+  /config:
+    get:
+      tags: [public]
+      operationId: getConfig
+      summary: Конфигурация инсталляции
+      description: |
+        Параметры, нужные клиенту для построения календаря: часовой пояс владельца,
+        рабочие часы, длина слота и горизонт бронирования. Тянется один раз на старте.
+      responses:
+        '200':
+          description: Конфигурация
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Config'
+
+  /calendar:
+    get:
+      tags: [public]
+      operationId: getCalendar
+      summary: Календарь месяца (публичный)
+      description: |
+        Дни запрошенного месяца (границы — в часовом поясе владельца) со слотами и их
+        статусами. Детали броней не раскрываются: занятые слоты имеют статус `BOOKED`
+        без информации о том, кем заняты.
+      parameters:
+        - $ref: '#/components/parameters/MonthQuery'
+      responses:
+        '200':
+          description: Календарь месяца
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Calendar'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /slots/{startAt}:
+    get:
+      tags: [public]
+      operationId: getSlot
+      summary: Статус слота (публичный)
+      description: |
+        Статус одного слота по его `startAt`. Полезно для переполучения статуса слота
+        (например, после ответа 409 на бронирование). Детали брони не раскрываются.
+      parameters:
+        - $ref: '#/components/parameters/StartAtPath'
+      responses:
+        '200':
+          description: Слот
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Slot'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /bookings:
+    post:
+      tags: [public]
+      operationId: createBooking
+      summary: Забронировать слот
+      description: |
+        Создаёт бронь на свободный слот, идентифицируемый `startAt`. Слот должен
+        существовать в сетке, попадать в рабочие часы, не быть в прошлом, быть в пределах
+        горизонта и быть свободным.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BookingRequest'
+      responses:
+        '201':
+          description: Бронь создана
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/BookingConfirmation'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/UnprocessableEntity'
+
+  /admin/calendar:
+    get:
+      tags: [admin]
+      operationId: getAdminCalendar
+      summary: Календарь месяца (владелец)
+      description: |
+        То же, что публичный календарь, но у занятых слотов раскрываются детали брони.
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/MonthQuery'
+      responses:
+        '200':
+          description: Календарь месяца с деталями броней
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminCalendar'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/slots/{startAt}:
+    get:
+      tags: [admin]
+      operationId: getAdminSlot
+      summary: Слот с деталями брони (владелец)
+      security:
+        - bearerAuth: []
+      parameters:
+        - $ref: '#/components/parameters/StartAtPath'
+      responses:
+        '200':
+          description: Слот с деталями брони (если занят)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminSlot'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/bookings/{id}:
+    delete:
+      tags: [admin]
+      operationId: cancelBooking
+      summary: Отменить бронь (владелец)
+      description: Отменяет бронь по её `id`. Слот снова становится свободным.
+      security:
+        - bearerAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Идентификатор брони
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '204':
+          description: Бронь отменена
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Секретный токен владельца, выдаётся при первом старте и пишется в лог.
+
+  parameters:
+    MonthQuery:
+      name: month
+      in: query
+      required: true
+      description: Месяц в формате `YYYY-MM` (интерпретируется в часовом поясе владельца).
+      schema:
+        type: string
+        pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+        example: '2026-06'
+
+    StartAtPath:
+      name: startAt
+      in: path
+      required: true
+      description: |
+        Момент начала слота (ISO-8601 `OffsetDateTime`). В пути URL значение должно быть
+        URL-кодировано (двоеточия и плюс).
+      schema:
+        type: string
+        format: date-time
+        example: '2026-06-08T05:00:00Z'
+
+  responses:
+    BadRequest:
+      description: Битый запрос (невалидный JSON, неверный формат параметра, провал валидации полей)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    Unauthorized:
+      description: Отсутствует или неверен токен владельца
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    NotFound:
+      description: Ресурс не найден
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    Conflict:
+      description: Слот уже занят
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+    UnprocessableEntity:
+      description: Семантически некорректный запрос (прошлое, вне горизонта, слот не из сетки)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/ProblemDetail'
+
+  schemas:
+
+    Config:
+      type: object
+      required: [ownerTimeZone, workingHours, slotMinutes, horizonDays]
+      properties:
+        ownerTimeZone:
+          type: string
+          description: IANA-имя часового пояса владельца.
+          example: 'Asia/Yerevan'
+        workingHours:
+          $ref: '#/components/schemas/WorkingHours'
+        slotMinutes:
+          type: integer
+          format: int32
+          description: Длина одного слота в минутах.
+          example: 30
+        horizonDays:
+          type: integer
+          format: int32
+          description: На сколько дней вперёд (от сегодня) доступно бронирование.
+          example: 31
+
+    WorkingHours:
+      type: object
+      description: Рабочие часы владельца (локальное время в его часовом поясе).
+      required: [start, end]
+      properties:
+        start:
+          type: string
+          description: Начало рабочего дня, формат `HH:mm`.
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+          example: '09:00'
+        end:
+          type: string
+          description: Конец рабочего дня, формат `HH:mm`.
+          pattern: '^([01]\d|2[0-3]):[0-5]\d$'
+          example: '18:00'
+
+    SlotStatus:
+      type: string
+      description: |
+        Вычисляемый статус слота:
+        - `PAST` — начало слота уже в прошлом;
+        - `BOOKED` — на слот есть бронь;
+        - `FREE` — слот свободен.
+      enum: [FREE, BOOKED, PAST]
+
+    Slot:
+      type: object
+      description: Слот без деталей брони (публичное представление).
+      required: [startAt, endAt, status]
+      properties:
+        startAt:
+          type: string
+          format: date-time
+          description: Момент начала слота (идентификатор слота).
+          example: '2026-06-08T05:00:00Z'
+        endAt:
+          type: string
+          format: date-time
+          description: Момент окончания слота.
+          example: '2026-06-08T05:30:00Z'
+        status:
+          $ref: '#/components/schemas/SlotStatus'
+
+    AdminSlot:
+      type: object
+      description: Слот с деталями брони (видны владельцу). `booking` присутствует, если статус `BOOKED`.
+      required: [startAt, endAt, status]
+      properties:
+        startAt:
+          type: string
+          format: date-time
+          example: '2026-06-08T05:00:00Z'
+        endAt:
+          type: string
+          format: date-time
+          example: '2026-06-08T05:30:00Z'
+        status:
+          $ref: '#/components/schemas/SlotStatus'
+        booking:
+          $ref: '#/components/schemas/Booking'
+
+    Day:
+      type: object
+      description: День месяца со слотами (публичное представление).
+      required: [date, hasFreeSlots, slots]
+      properties:
+        date:
+          type: string
+          format: date
+          description: Дата дня в часовом поясе владельца.
+          example: '2026-06-08'
+        hasFreeSlots:
+          type: boolean
+          description: Есть ли в этот день хотя бы один свободный слот (для подсветки в сетке).
+        slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/Slot'
+
+    AdminDay:
+      type: object
+      description: День месяца со слотами и деталями броней (владелец).
+      required: [date, hasFreeSlots, slots]
+      properties:
+        date:
+          type: string
+          format: date
+          example: '2026-06-08'
+        hasFreeSlots:
+          type: boolean
+        slots:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminSlot'
+
+    Calendar:
+      type: object
+      description: Календарь месяца (публичный).
+      required: [month, ownerTimeZone, days]
+      properties:
+        month:
+          type: string
+          pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+          example: '2026-06'
+        ownerTimeZone:
+          type: string
+          example: 'Asia/Yerevan'
+        days:
+          type: array
+          items:
+            $ref: '#/components/schemas/Day'
+
+    AdminCalendar:
+      type: object
+      description: Календарь месяца с деталями броней (владелец).
+      required: [month, ownerTimeZone, days]
+      properties:
+        month:
+          type: string
+          pattern: '^\d{4}-(0[1-9]|1[0-2])$'
+          example: '2026-06'
+        ownerTimeZone:
+          type: string
+          example: 'Asia/Yerevan'
+        days:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminDay'
+
+    Booking:
+      type: object
+      description: Детали брони (видны владельцу).
+      required: [id, startAt, name, meetingLink, createdAt]
+      properties:
+        id:
+          type: string
+          format: uuid
+          description: Идентификатор брони.
+        startAt:
+          type: string
+          format: date-time
+          description: Начало забронированного слота.
+          example: '2026-06-08T05:00:00Z'
+        name:
+          type: string
+          description: Имя посетителя.
+          example: 'Анна'
+        meetingLink:
+          type: string
+          format: uri
+          description: Ссылка на встречу.
+          example: 'https://meet.example.com/abc-defg-hij'
+        description:
+          type: string
+          nullable: true
+          description: Описание встречи (опционально).
+          example: 'Обсудить интеграцию'
+        createdAt:
+          type: string
+          format: date-time
+          description: Когда бронь создана.
+
+    BookingRequest:
+      type: object
+      description: Запрос на бронирование слота.
+      required: [startAt, name, meetingLink]
+      properties:
+        startAt:
+          type: string
+          format: date-time
+          description: Начало слота, который бронируется (идентификатор слота).
+          example: '2026-06-08T05:00:00Z'
+        name:
+          type: string
+          description: Имя посетителя.
+          minLength: 1
+          maxLength: 255
+          example: 'Анна'
+        meetingLink:
+          type: string
+          format: uri
+          description: Ссылка на встречу (обязательно).
+          minLength: 1
+          maxLength: 2048
+          example: 'https://meet.example.com/abc-defg-hij'
+        description:
+          type: string
+          nullable: true
+          description: Описание встречи (опционально).
+          maxLength: 2000
+          example: 'Обсудить интеграцию'
+
+    BookingConfirmation:
+      type: object
+      description: |
+        Подтверждение брони, возвращаемое посетителю. Идентификатор брони (`id`) не
+        раскрывается — отмена доступна только владельцу.
+      required: [startAt, endAt, name, meetingLink, createdAt]
+      properties:
+        startAt:
+          type: string
+          format: date-time
+          example: '2026-06-08T05:00:00Z'
+        endAt:
+          type: string
+          format: date-time
+          example: '2026-06-08T05:30:00Z'
+        name:
+          type: string
+          example: 'Анна'
+        meetingLink:
+          type: string
+          format: uri
+          example: 'https://meet.example.com/abc-defg-hij'
+        description:
+          type: string
+          nullable: true
+          example: 'Обсудить интеграцию'
+        createdAt:
+          type: string
+          format: date-time
+
+    ErrorCode:
+      type: string
+      description: |
+        Машиночитаемый код ошибки:
+        - `VALIDATION_FAILED` — провал валидации полей (см. `errors[]`), `400`;
+        - `MALFORMED_REQUEST` — битый JSON или неверный формат параметра, `400`;
+        - `SLOT_NOT_FOUND` / `BOOKING_NOT_FOUND` — ресурс не найден, `404`;
+        - `SLOT_ALREADY_BOOKED` — слот уже занят, `409`;
+        - `SLOT_IN_PAST` — слот в прошлом, `422`;
+        - `SLOT_OUT_OF_HORIZON` — слот за горизонтом бронирования, `422`;
+        - `SLOT_NOT_ON_GRID` — `startAt` не соответствует реальному слоту сетки, `422`;
+        - `UNAUTHORIZED` — отсутствует или неверен токен, `401`.
+      enum:
+        - VALIDATION_FAILED
+        - MALFORMED_REQUEST
+        - SLOT_NOT_FOUND
+        - BOOKING_NOT_FOUND
+        - SLOT_ALREADY_BOOKED
+        - SLOT_IN_PAST
+        - SLOT_OUT_OF_HORIZON
+        - SLOT_NOT_ON_GRID
+        - UNAUTHORIZED
+
+    ValidationError:
+      type: object
+      description: Ошибка валидации конкретного поля.
+      required: [field, message]
+      properties:
+        field:
+          type: string
+          description: Имя поля, не прошедшего валидацию.
+          example: 'meetingLink'
+        message:
+          type: string
+          description: Человекочитаемое сообщение.
+          example: 'must be a valid URL'
+
+    ProblemDetail:
+      type: object
+      description: |
+        Ошибка в формате RFC 9457 (`application/problem+json`), расширенная полями
+        `errorCode` и `errors[]`.
+      required: [status, errorCode]
+      properties:
+        type:
+          type: string
+          format: uri
+          description: URI типа проблемы.
+          example: 'about:blank'
+        title:
+          type: string
+          description: Краткое название проблемы.
+          example: 'Unprocessable Entity'
+        status:
+          type: integer
+          format: int32
+          description: HTTP-статус.
+          example: 422
+        detail:
+          type: string
+          description: Человекочитаемое описание.
+          example: 'Слот находится в прошлом'
+        instance:
+          type: string
+          format: uri
+          description: URI запроса, вызвавшего ошибку.
+        errorCode:
+          $ref: '#/components/schemas/ErrorCode'
+        errors:
+          type: array
+          description: Детали валидации по полям (для `VALIDATION_FAILED`).
+          items:
+            $ref: '#/components/schemas/ValidationError'

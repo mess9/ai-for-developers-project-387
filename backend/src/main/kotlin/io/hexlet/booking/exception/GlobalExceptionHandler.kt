@@ -12,6 +12,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException
 import org.springframework.web.bind.annotation.ExceptionHandler
 import org.springframework.web.bind.annotation.RestControllerAdvice
 import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException
+import java.time.format.DateTimeParseException
 import io.hexlet.booking.model.ProblemDetail as ApiProblemDetail
 
 @RestControllerAdvice
@@ -83,6 +84,10 @@ class GlobalExceptionHandler {
     @ExceptionHandler(MethodArgumentTypeMismatchException::class)
     fun typeMismatch(ex: MethodArgumentTypeMismatchException) =
         problem(400, ErrorCode.MALFORMED_REQUEST, "Неверный формат параметра: ${ex.name}")
+
+    @ExceptionHandler(DateTimeParseException::class)
+    fun dateTimeParse(ex: DateTimeParseException) =
+        problem(400, ErrorCode.MALFORMED_REQUEST, "Неверный формат даты: ${ex.parsedString}")
 
     // ──── helpers ────────────────────────────────────────────────────────────
 

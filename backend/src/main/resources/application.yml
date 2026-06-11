@@ -24,14 +24,8 @@ booking:
   horizon-days: ${BOOKING_HORIZON_DAYS:31}
 
 # Сгенерированные интерфейсы имеют @RequestMapping("${api.base-path:/api/v1}").
-# context-path уже добавляет /api/v1 — чтобы не было двойного префикса,
-# зануляем api.base-path здесь.
 api:
-  base-path: ""
-
-server:
-  servlet:
-    context-path: /api/v1
+  base-path: /api/v1
 
 management:
   endpoints:

@@ -33,8 +33,10 @@ class BookingApplicationTests : AbstractIntegrationTest() {
 
     @Test
     fun `actuator health returns UP`() {
-        val response = get("/actuator/health")
-
+        val response = TestResponse(
+            client(org.http4k.core.Request(org.http4k.core.Method.GET, org.http4k.core.Uri.of("http://localhost:$port/actuator/health"))),
+            mapper,
+        )
         assertThat(response.status).isEqualTo(200)
     }
 

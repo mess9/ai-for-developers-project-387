@@ -2,6 +2,8 @@ package io.hexlet.booking.security
 
 import org.springframework.context.annotation.Bean
 import org.springframework.context.annotation.Configuration
+import org.springframework.core.Ordered
+import org.springframework.core.annotation.Order
 import org.springframework.http.HttpStatus
 import org.springframework.http.MediaType
 import org.springframework.security.config.annotation.web.builders.HttpSecurity
@@ -9,10 +11,14 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.security.config.http.SessionCreationPolicy
 import org.springframework.security.web.SecurityFilterChain
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter
+import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry
+import org.springframework.web.servlet.config.annotation.ViewControllerRegistry
+import org.springframework.web.servlet.config.annotation.WebMvcConfigurer
 
 @Configuration
 @EnableWebSecurity
-class SecurityConfig(private val bearerFilter: BearerTokenFilter) {
+@Order(Ordered.HIGHEST_PRECEDENCE)
+class SecurityConfig(private val bearerFilter: BearerTokenFilter) : WebMvcConfigurer {
 
     @Bean
     fun filterChain(http: HttpSecurity): SecurityFilterChain {
@@ -21,8 +27,7 @@ class SecurityConfig(private val bearerFilter: BearerTokenFilter) {
             .sessionManagement { it.sessionCreationPolicy(SessionCreationPolicy.STATELESS) }
             .addFilterBefore(bearerFilter, UsernamePasswordAuthenticationFilter::class.java)
             .authorizeHttpRequests { auth ->
-                // admin/** защищено — context-path /api/v1 стрипается Spring Security
-                auth.requestMatchers("/admin/**").authenticated()
+                auth.requestMatchers("/api/v1/admin/**").authenticated()
                 auth.anyRequest().permitAll()
             }
             .exceptionHandling { ex ->
@@ -35,5 +40,16 @@ class SecurityConfig(private val bearerFilter: BearerTokenFilter) {
                 }
             }
         return http.build()
+    }
+
+    override fun addResourceHandlers(registry: ResourceHandlerRegistry) {
+        registry
+            .addResourceHandler("/**")
+            .addResourceLocations("classpath:/static/")
+    }
+
+    override fun addViewControllers(registry: ViewControllerRegistry) {
+        registry.addViewController("/").setViewName("forward:/index.html")
+        registry.addViewController("/api/v1/").setViewName("forward:/index.html")
     }
 }

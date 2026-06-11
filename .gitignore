@@ -38,3 +38,11 @@ bin/
 
 ### Mac OS ###
 .DS_Store
+
+### Node / frontend ###
+node_modules/
+frontend/dist/
+
+### Contract (TypeSpec) ###
+# openapi.yaml — сгенерированный артефакт; источник правды — contract/*.tsp
+contract/tsp-output/

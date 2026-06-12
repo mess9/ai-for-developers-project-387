@@ -1,9 +1,9 @@
 name: e2e
 
 on:
-  push:
-    branches:
-      - main
+  # Только на PR: GitHub гоняет тесты на merge-коммите (main + ветка),
+  # то есть на том, что окажется в main. Повторный прогон после мержа
+  # избыточен (и деплой триггерит Jenkins через Gitea, не GitHub-тесты).
   pull_request:
     branches:
       - main

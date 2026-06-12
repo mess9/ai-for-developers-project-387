@@ -6,10 +6,12 @@ pipeline {
     }
 
     environment {
-        IMAGE_NAME  = "localhost:5000/mess9/booking"
-        IMAGE_TAG   = "${env.BUILD_NUMBER}"
-        COMPOSE_DIR = "/home/mess9/services/docker/booking"
-        APP_HOST    = "booking.fil-lost.org"
+        IMAGE_NAME      = "localhost:5000/mess9/booking"
+        IMAGE_TAG       = "${env.BUILD_NUMBER}"
+        COMPOSE_DIR     = "/home/mess9/services/docker/booking"
+        APP_HOST        = "booking.fil-lost.org"
+        // BuildKit нужен для --mount=type=cache в Dockerfile (кеш Gradle/npm между сборками)
+        DOCKER_BUILDKIT = "1"
     }
 
     stages {

@@ -15,6 +15,11 @@ jobs:
     steps:
       - uses: googleapis/release-please-action@v4
         with:
+          # PAT вместо встроенного GITHUB_TOKEN: иначе push в release-ветку,
+          # сделанный ботом github-actions, не триггерит другие воркфлоу
+          # (защита GitHub от рекурсии) — и e2e на release-PR не запускается.
+          # С PAT release-PR создаётся «от пользователя» и e2e на нём отрабатывает.
+          token: ${{ secrets.RELEASE_PLEASE_TOKEN }}
           # Конфиг: один релиз на весь репозиторий (release-type=simple),
           # версия и CHANGELOG.md в корне, тег вида vX.Y.Z.
           config-file: release-please-config.json

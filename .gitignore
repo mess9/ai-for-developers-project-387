@@ -46,3 +46,8 @@ frontend/dist/
 ### Contract (TypeSpec) ###
 # openapi.yaml — сгенерированный артефакт; источник правды — contract/*.tsp
 contract/tsp-output/
+
+### Local env ###
+.env
+.env.local
+!.env.example

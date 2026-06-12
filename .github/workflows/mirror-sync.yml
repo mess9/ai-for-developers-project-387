@@ -1,0 +1,22 @@
+name: mirror-sync
+
+# Push-driven зеркалирование: вместо опроса по интервалу GitHub на каждый push
+# в main дёргает у Gitea API mirror-sync, и Gitea немедленно подтягивает копию.
+# Дальше Gitea сама уведомляет Jenkins (вебхук) → сборка и деплой.
+on:
+  push:
+    branches: [main]
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      # Gitea за Cloudflare Access — нужен service token (CF-Access-Client-*),
+      # иначе вернётся HTML-логин вместо API. Gitea-токен — право на mirror-sync.
+      - name: Trigger Gitea mirror sync
+        run: |
+          curl -fsS -X POST \
+            "https://gitea.fil-lost.org/api/v1/repos/mess9/ai-for-developers-project-386/mirror-sync" \
+            -H "Authorization: token ${{ secrets.GITEA_TOKEN }}" \
+            -H "CF-Access-Client-Id: ${{ secrets.CF_ACCESS_CLIENT_ID }}" \
+            -H "CF-Access-Client-Secret: ${{ secrets.CF_ACCESS_CLIENT_SECRET }}"

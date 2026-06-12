@@ -2,6 +2,8 @@ package io.hexlet.booking
 
 import com.fasterxml.jackson.databind.ObjectMapper
 import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule
+import io.hexlet.booking.config.BookingProperties
+import io.hexlet.booking.db.Tables.EVENT_TYPES
 import org.http4k.client.ApacheClient
 import org.http4k.core.*
 import org.jooq.DSLContext
@@ -12,6 +14,10 @@ import org.springframework.boot.test.web.server.LocalServerPort
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import org.testcontainers.postgresql.PostgreSQLContainer
+import java.time.LocalDate
+import java.time.OffsetDateTime
+import java.time.ZonedDateTime
+import java.util.*
 
 private val postgres = PostgreSQLContainer("postgres:17-alpine").apply {
     start()
@@ -26,6 +32,9 @@ abstract class AbstractIntegrationTest {
     @Autowired
     protected lateinit var dsl: DSLContext
 
+    @Autowired
+    protected lateinit var props: BookingProperties
+
     protected lateinit var client: HttpHandler
     protected lateinit var baseUrl: String
     protected val mapper = ObjectMapper().registerModule(JavaTimeModule())
@@ -39,6 +48,7 @@ abstract class AbstractIntegrationTest {
     @BeforeEach
     fun cleanDatabase() {
         dsl.deleteFrom(io.hexlet.booking.db.Tables.BOOKINGS).execute()
+        dsl.deleteFrom(io.hexlet.booking.db.Tables.EVENT_TYPES).execute()
     }
 
     protected fun get(path: String): TestResponse {
@@ -79,6 +89,32 @@ abstract class AbstractIntegrationTest {
         val response = client(request)
         return TestResponse(response, mapper)
     }
+
+    // ──── доменные хелперы ────────────────────────────────────────────────────
+
+    /** Создаёт тип события напрямую в БД, возвращает его id. */
+    protected fun createEventType(durationMinutes: Int = 30, name: String = "Intro call"): UUID {
+        val id = UUID.randomUUID()
+        dsl.insertInto(EVENT_TYPES)
+            .set(EVENT_TYPES.ID, id)
+            .set(EVENT_TYPES.NAME, name)
+            .set(EVENT_TYPES.DESCRIPTION, "Описание")
+            .set(EVENT_TYPES.DURATION_MINUTES, durationMinutes)
+            .execute()
+        return id
+    }
+
+    /**
+     * Старт слота на сетке в рабочих часах: `daysAhead` дней вперёд от сегодня (в OWNER_TZ),
+     * `slotIndex`-й шаг сетки от начала рабочего дня. По умолчанию — завтра в начале дня
+     * (гарантированно будущее и в горизонте).
+     */
+    protected fun slotStart(daysAhead: Long = 1, slotIndex: Long = 0): OffsetDateTime =
+        ZonedDateTime.of(
+            LocalDate.now(props.zone).plusDays(daysAhead),
+            props.workStart.plusMinutes(props.gridMinutes.toLong() * slotIndex),
+            props.zone,
+        ).toOffsetDateTime()
 
     companion object {
         @DynamicPropertySource

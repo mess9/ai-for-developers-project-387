@@ -7,10 +7,12 @@ import java.time.ZoneId
 @ConfigurationProperties(prefix = "booking")
 data class BookingProperties(
     val ownerTz: String = "Asia/Yerevan",
-    /** Формат: "HH:mm-HH:mm", например "09:00-18:00" */
+    /** Формат: "HH:00-HH:00", только целые часы, например "09:00-18:00". */
     val workingHours: String = "09:00-18:00",
-    val slotMinutes: Int = 30,
-    val horizonDays: Int = 31,
+    /** Шаг сетки стартов в минутах. Фиксирован — 15. */
+    val gridMinutes: Int = 15,
+    /** На сколько дней вперёд (от сегодня) доступно бронирование. */
+    val horizonDays: Int = 14,
 ) {
     val zone: ZoneId get() = ZoneId.of(ownerTz)
     val workStart: LocalTime get() = LocalTime.parse(workingHours.substringBefore("-"))

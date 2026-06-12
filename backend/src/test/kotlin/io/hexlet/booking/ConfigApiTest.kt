@@ -1,13 +1,9 @@
 package io.hexlet.booking
 
-import io.hexlet.booking.config.BookingProperties
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
 
 class ConfigApiTest : AbstractIntegrationTest() {
-
-    @Autowired lateinit var props: BookingProperties
 
     @Test
     fun `GET config returns 200 with correct fields`() {
@@ -18,7 +14,7 @@ class ConfigApiTest : AbstractIntegrationTest() {
 
         assertThat(body).contains("\"ownerTimeZone\"")
         assertThat(body).contains("\"workingHours\"")
-        assertThat(body).contains("\"slotMinutes\"")
+        assertThat(body).contains("\"gridMinutes\"")
         assertThat(body).contains("\"horizonDays\"")
     }
 
@@ -32,12 +28,12 @@ class ConfigApiTest : AbstractIntegrationTest() {
     }
 
     @Test
-    fun `GET config slotMinutes matches configuration`() {
+    fun `GET config gridMinutes matches configuration`() {
         val response = get("/config")
 
-        val slotMinutes = response.extractPath("slotMinutes")?.toInt()
+        val gridMinutes = response.extractPath("gridMinutes")?.toInt()
 
-        assertThat(slotMinutes).isEqualTo(props.slotMinutes)
+        assertThat(gridMinutes).isEqualTo(props.gridMinutes)
     }
 
     @Test

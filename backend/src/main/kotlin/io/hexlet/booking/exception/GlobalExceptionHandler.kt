@@ -20,8 +20,8 @@ class GlobalExceptionHandler {
 
     // ──── 404 ────────────────────────────────────────────────────────────────
 
-    @ExceptionHandler(SlotNotFoundException::class)
-    fun slotNotFound() = problem(404, ErrorCode.SLOT_NOT_FOUND, "Слот не найден")
+    @ExceptionHandler(EventTypeNotFoundException::class)
+    fun eventTypeNotFound() = problem(404, ErrorCode.EVENT_TYPE_NOT_FOUND, "Тип события не найден")
 
     @ExceptionHandler(BookingNotFoundException::class)
     fun bookingNotFound() = problem(404, ErrorCode.BOOKING_NOT_FOUND, "Бронь не найдена")
@@ -31,15 +31,10 @@ class GlobalExceptionHandler {
     @ExceptionHandler(SlotAlreadyBookedException::class)
     fun slotBooked() = problem(409, ErrorCode.SLOT_ALREADY_BOOKED, "Слот уже занят")
 
-    /** Backstop: гонка при двойном бронировании пробивается через UNIQUE-констрейнт */
+    /** Backstop: гонка при двойном бронировании пробивается через EXCLUDE-констрейнт (23P01). */
     @ExceptionHandler(DataIntegrityViolationException::class)
-    fun integrityViolation(ex: DataIntegrityViolationException): ResponseEntity<ApiProblemDetail> {
-        val msg = ex.message?.lowercase() ?: ""
-        return if ("bookings_slot_id_uq" in msg || "slot_id" in msg)
-            problem(409, ErrorCode.SLOT_ALREADY_BOOKED, "Слот уже занят")
-        else
-            problem(409, ErrorCode.SLOT_ALREADY_BOOKED, "Конфликт данных")
-    }
+    fun integrityViolation() =
+        problem(409, ErrorCode.SLOT_ALREADY_BOOKED, "Слот уже занят")
 
     // ──── 422 ────────────────────────────────────────────────────────────────
 
@@ -52,11 +47,11 @@ class GlobalExceptionHandler {
     @ExceptionHandler(SlotNotOnGridException::class)
     fun slotNotOnGrid() = problem(422, ErrorCode.SLOT_NOT_ON_GRID, "Старт слота не соответствует сетке")
 
-    @ExceptionHandler(InvalidMeetingLinkException::class)
-    fun invalidMeetingLink() = problem(400, ErrorCode.VALIDATION_FAILED, "Неверный формат ссылки на встречу", 
-        listOf(ValidationError(field = "meetingLink", message = "must be a valid URI")))
-
     // ──── 400 ────────────────────────────────────────────────────────────────
+
+    @ExceptionHandler(FieldValidationException::class)
+    fun fieldValidation(ex: FieldValidationException) =
+        problem(400, ErrorCode.VALIDATION_FAILED, "Ошибка валидации полей", ex.errors)
 
     @ExceptionHandler(ConstraintViolationException::class)
     fun constraintViolation(ex: ConstraintViolationException): ResponseEntity<ApiProblemDetail> {
@@ -105,7 +100,7 @@ class GlobalExceptionHandler {
                 title = when (code) {
                     ErrorCode.VALIDATION_FAILED -> "Validation Failed"
                     ErrorCode.MALFORMED_REQUEST -> "Malformed Request"
-                    ErrorCode.SLOT_NOT_FOUND -> "Slot Not Found"
+                    ErrorCode.EVENT_TYPE_NOT_FOUND -> "Event Type Not Found"
                     ErrorCode.BOOKING_NOT_FOUND -> "Booking Not Found"
                     ErrorCode.SLOT_ALREADY_BOOKED -> "Slot Already Booked"
                     ErrorCode.SLOT_IN_PAST -> "Slot In Past"

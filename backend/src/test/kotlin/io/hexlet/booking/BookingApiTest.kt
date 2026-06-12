@@ -1,97 +1,99 @@
 package io.hexlet.booking
 
-import io.hexlet.booking.config.BookingProperties
 import io.hexlet.booking.db.Tables.BOOKINGS
-import io.hexlet.booking.db.Tables.SLOTS
-import io.hexlet.booking.model.BookingRequest
-import io.hexlet.booking.service.TokenService
 import org.assertj.core.api.Assertions.assertThat
 import org.junit.jupiter.api.Test
-import org.springframework.beans.factory.annotation.Autowired
-import java.time.LocalDate
 import java.time.OffsetDateTime
-import java.time.ZoneId
-import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
+import java.util.*
 
 class BookingApiTest : AbstractIntegrationTest() {
 
-    @Autowired lateinit var props: BookingProperties
-    @Autowired lateinit var tokenService: TokenService
+    private fun iso(dt: OffsetDateTime) = dt.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
 
-    private fun firstFutureSlot() = dsl.selectFrom(SLOTS)
-        .where(SLOTS.START_AT.gt(OffsetDateTime.now()))
-        .orderBy(SLOTS.START_AT)
-        .limit(1)
-        .fetchOne()!!
-
-    private fun slotStartAtStr(slot: io.hexlet.booking.db.tables.records.SlotsRecord): String =
-        slot.startAt.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
-
-    private fun validRequest(startAt: String) = mapOf(
-        "startAt"     to startAt,
-        "name"        to "Анна Иванова",
-        "meetingLink" to "https://meet.example.com/abc-defg",
-        "description" to "Тестовая встреча",
-    )
-
-    private fun validBookingRequest(startAt: OffsetDateTime) = BookingRequest(
-        startAt = startAt,
-        name = "Анна Иванова",
-        meetingLink = "https://meet.example.com/abc-defg",
-        description = "Тестовая встреча"
-    )
+    private fun request(
+        eventTypeId: UUID,
+        startAt: OffsetDateTime,
+        name: String = "Анна Иванова",
+        meetingLink: String = "https://meet.example.com/abc-defg",
+        description: String? = "Тестовая встреча",
+    ): Map<String, Any?> = buildMap {
+        put("eventTypeId", eventTypeId.toString())
+        put("startAt", iso(startAt))
+        put("name", name)
+        put("meetingLink", meetingLink)
+        if (description != null) put("description", description)
+    }
 
     @Test
     fun `POST bookings 201 for valid free slot`() {
-        val slot = firstFutureSlot()
+        val id = createEventType(durationMinutes = 30, name = "Intro call")
+        val start = slotStart()
 
-        val response = post("/bookings", validBookingRequest(slot.startAt))
+        val response = post("/bookings", request(id, start))
 
         assertThat(response.status).isEqualTo(201)
+        assertThat(response.extractPath("eventTypeName")).isEqualTo("Intro call")
         assertThat(response.extractPath("name")).isEqualTo("Анна Иванова")
         assertThat(response.extractPath("meetingLink")).contains("meet.example.com")
-        assertThat(response.extractPath("description")).isEqualTo("Тестовая встреча")
-        assertThat(response.extractPath("createdAt")).isNotBlank()
         assertThat(response.extractPath("startAt")).isNotBlank()
         assertThat(response.extractPath("endAt")).isNotBlank()
+        assertThat(response.extractPath("createdAt")).isNotBlank()
+        // id брони гостю не раскрывается
         assertThat(response.jsonBody().has("id")).isFalse()
     }
 
     @Test
-    fun `POST bookings saves booking in database`() {
-        val slot = firstFutureSlot()
+    fun `POST bookings saves booking with computed endAt`() {
+        val id = createEventType(durationMinutes = 30)
+        val start = slotStart()
 
-        post("/bookings", validBookingRequest(slot.startAt))
+        post("/bookings", request(id, start))
 
-        val saved = dsl.selectFrom(BOOKINGS).where(BOOKINGS.SLOT_ID.eq(slot.id)).fetchOne()
+        val saved = dsl.selectFrom(BOOKINGS).fetchOne()
         assertThat(saved).isNotNull
-        assertThat(saved!!.name).isEqualTo("Анна Иванова")
+        assertThat(saved!!.eventTypeId).isEqualTo(id)
+        assertThat(saved.endAt).isEqualTo(saved.startAt.plusMinutes(30))
     }
 
     @Test
-    fun `POST bookings 409 when slot already booked`() {
-        val slot = firstFutureSlot()
-        val request = validBookingRequest(slot.startAt)
+    fun `POST bookings 409 when slot already booked same type`() {
+        val id = createEventType()
+        val req = request(id, slotStart())
 
-        post("/bookings", request)
-
-        val response = post("/bookings", request)
+        post("/bookings", req)
+        val response = post("/bookings", req)
 
         assertThat(response.status).isEqualTo(409)
         assertThat(response.extractPath("errorCode")).isEqualTo("SLOT_ALREADY_BOOKED")
     }
 
     @Test
-    fun `POST bookings 422 for past slot`() {
-        val pastStart = OffsetDateTime.now().minusDays(2).withHour(10).withMinute(0).withSecond(0).withNano(0)
-        val pastEnd   = pastStart.plusMinutes(30)
-        dsl.insertInto(SLOTS, SLOTS.START_AT, SLOTS.END_AT)
-            .values(pastStart, pastEnd)
-            .onConflictDoNothing()
-            .execute()
+    fun `POST bookings 409 when overlapping booking of another type`() {
+        val typeA = createEventType(durationMinutes = 30, name = "A")
+        val typeB = createEventType(durationMinutes = 60, name = "B")
+        val start = slotStart()
 
-        val response = post("/bookings", validBookingRequest(pastStart))
+        post("/bookings", request(typeA, start))
+        // бронь типа B на то же время пересекается с бронью типа A → 409
+        val response = post("/bookings", request(typeB, start))
+
+        assertThat(response.status).isEqualTo(409)
+        assertThat(response.extractPath("errorCode")).isEqualTo("SLOT_ALREADY_BOOKED")
+    }
+
+    @Test
+    fun `POST bookings 404 when event type not found`() {
+        val response = post("/bookings", request(UUID.randomUUID(), slotStart()))
+
+        assertThat(response.status).isEqualTo(404)
+        assertThat(response.extractPath("errorCode")).isEqualTo("EVENT_TYPE_NOT_FOUND")
+    }
+
+    @Test
+    fun `POST bookings 422 for past slot`() {
+        val id = createEventType()
+        val response = post("/bookings", request(id, slotStart(daysAhead = -1)))
 
         assertThat(response.status).isEqualTo(422)
         assertThat(response.extractPath("errorCode")).isEqualTo("SLOT_IN_PAST")
@@ -99,15 +101,8 @@ class BookingApiTest : AbstractIntegrationTest() {
 
     @Test
     fun `POST bookings 422 for slot beyond horizon`() {
-        val futureDate = LocalDate.now(props.zone).plusDays(props.horizonDays.toLong() + 10)
-        val farStart = ZonedDateTime.of(futureDate, props.workStart, props.zone).toOffsetDateTime()
-        val farEnd   = farStart.plusMinutes(props.slotMinutes.toLong())
-        dsl.insertInto(SLOTS, SLOTS.START_AT, SLOTS.END_AT)
-            .values(farStart, farEnd)
-            .onConflictDoNothing()
-            .execute()
-
-        val response = post("/bookings", validBookingRequest(farStart))
+        val id = createEventType()
+        val response = post("/bookings", request(id, slotStart(daysAhead = props.horizonDays + 5L)))
 
         assertThat(response.status).isEqualTo(422)
         assertThat(response.extractPath("errorCode")).isEqualTo("SLOT_OUT_OF_HORIZON")
@@ -115,49 +110,52 @@ class BookingApiTest : AbstractIntegrationTest() {
 
     @Test
     fun `POST bookings 201 for slot exactly on horizon boundary`() {
-        val lastDay = LocalDate.now(props.zone).plusDays(props.horizonDays.toLong())
-        val lastStart = ZonedDateTime.of(lastDay, props.workStart, props.zone).toOffsetDateTime()
-        val lastEnd   = lastStart.plusMinutes(props.slotMinutes.toLong())
-        dsl.insertInto(SLOTS, SLOTS.START_AT, SLOTS.END_AT)
-            .values(lastStart, lastEnd)
-            .onConflictDoNothing()
-            .execute()
-
-        val response = post("/bookings", validBookingRequest(lastStart))
+        val id = createEventType()
+        val response = post("/bookings", request(id, slotStart(daysAhead = props.horizonDays.toLong())))
 
         assertThat(response.status).isEqualTo(201)
     }
 
     @Test
     fun `POST bookings 422 when startAt not on grid`() {
-        val nonExistent = OffsetDateTime.now().plusDays(1).withSecond(37)
+        val id = createEventType()
+        // 09:07 — не на 15-мин границе
+        val offGrid = slotStart().plusMinutes(7)
 
-        val response = post("/bookings", validBookingRequest(nonExistent))
+        val response = post("/bookings", request(id, offGrid))
 
         assertThat(response.status).isEqualTo(422)
         assertThat(response.extractPath("errorCode")).isEqualTo("SLOT_NOT_ON_GRID")
     }
 
     @Test
-    fun `POST bookings 404 when slot does not exist in database`() {
-        val slot = firstFutureSlot()
-        val nonExistentStart = slot.startAt.plusDays(100)
+    fun `POST bookings 422 when start outside working hours`() {
+        val id = createEventType()
+        // на сетке, но до начала рабочего дня
+        val beforeHours = slotStart().minusHours(2)
 
-        val response = post("/bookings", validBookingRequest(nonExistentStart))
+        val response = post("/bookings", request(id, beforeHours))
 
-        assertThat(response.status).isEqualTo(404)
-        assertThat(response.extractPath("errorCode")).isEqualTo("SLOT_NOT_FOUND")
+        assertThat(response.status).isEqualTo(422)
+        assertThat(response.extractPath("errorCode")).isEqualTo("SLOT_NOT_ON_GRID")
+    }
+
+    @Test
+    fun `POST bookings 422 when interval does not fit working hours`() {
+        // 120-мин встреча со стартом за 1 час до конца рабочего дня не влезает
+        val id = createEventType(durationMinutes = 120)
+        val nearEnd = slotStart().with(props.workEnd.minusHours(1))
+
+        val response = post("/bookings", request(id, nearEnd))
+
+        assertThat(response.status).isEqualTo(422)
+        assertThat(response.extractPath("errorCode")).isEqualTo("SLOT_NOT_ON_GRID")
     }
 
     @Test
     fun `POST bookings 400 when meetingLink is not valid URI`() {
-        val slot = firstFutureSlot()
-
-        val response = post("/bookings", mapOf(
-            "startAt" to slotStartAtStr(slot),
-            "name" to "Анна",
-            "meetingLink" to "not-a-valid-uri"
-        ))
+        val id = createEventType()
+        val response = post("/bookings", request(id, slotStart(), meetingLink = "приходите"))
 
         assertThat(response.status).isEqualTo(400)
         assertThat(response.extractPath("errorCode")).isEqualTo("VALIDATION_FAILED")
@@ -165,13 +163,8 @@ class BookingApiTest : AbstractIntegrationTest() {
 
     @Test
     fun `POST bookings 400 when name is empty`() {
-        val slot = firstFutureSlot()
-
-        val response = post("/bookings", mapOf(
-            "startAt" to slotStartAtStr(slot),
-            "name" to "",
-            "meetingLink" to "https://meet.example.com/abc"
-        ))
+        val id = createEventType()
+        val response = post("/bookings", request(id, slotStart(), name = ""))
 
         assertThat(response.status).isEqualTo(400)
         assertThat(response.extractPath("errorCode")).isEqualTo("VALIDATION_FAILED")
@@ -180,39 +173,24 @@ class BookingApiTest : AbstractIntegrationTest() {
 
     @Test
     fun `POST bookings 201 when name is exactly minLength 1`() {
-        val slot = firstFutureSlot()
-
-        val response = post("/bookings", mapOf(
-            "startAt" to slotStartAtStr(slot),
-            "name" to "Я",
-            "meetingLink" to "https://meet.example.com/abc"
-        ))
+        val id = createEventType()
+        val response = post("/bookings", request(id, slotStart(), name = "Я"))
 
         assertThat(response.status).isEqualTo(201)
     }
 
     @Test
     fun `POST bookings 201 when name is exactly maxLength 255`() {
-        val slot = firstFutureSlot()
-
-        val response = post("/bookings", mapOf(
-            "startAt" to slotStartAtStr(slot),
-            "name" to "A".repeat(255),
-            "meetingLink" to "https://meet.example.com/test"
-        ))
+        val id = createEventType()
+        val response = post("/bookings", request(id, slotStart(), name = "A".repeat(255)))
 
         assertThat(response.status).isEqualTo(201)
     }
 
     @Test
     fun `POST bookings 400 when name exceeds maxLength 255`() {
-        val slot = firstFutureSlot()
-
-        val response = post("/bookings", mapOf(
-            "startAt" to slotStartAtStr(slot),
-            "name" to "A".repeat(256),
-            "meetingLink" to "https://meet.example.com/test"
-        ))
+        val id = createEventType()
+        val response = post("/bookings", request(id, slotStart(), name = "A".repeat(256)))
 
         assertThat(response.status).isEqualTo(400)
         assertThat(response.extractPath("errorCode")).isEqualTo("VALIDATION_FAILED")
@@ -220,11 +198,11 @@ class BookingApiTest : AbstractIntegrationTest() {
 
     @Test
     fun `POST bookings 400 when meetingLink is missing`() {
-        val slot = firstFutureSlot()
-
+        val id = createEventType()
         val response = post("/bookings", mapOf(
-            "startAt" to slotStartAtStr(slot),
-            "name" to "Анна"
+            "eventTypeId" to id.toString(),
+            "startAt" to iso(slotStart()),
+            "name" to "Анна",
         ))
 
         assertThat(response.status).isEqualTo(400)
@@ -239,94 +217,21 @@ class BookingApiTest : AbstractIntegrationTest() {
         val response = client(request)
 
         assertThat(response.status.code).isEqualTo(400)
-        assertThat(response.bodyString()).contains("errorCode")
         assertThat(response.bodyString()).contains("MALFORMED_REQUEST")
     }
 
     @Test
-    fun `GET slot 200 for existing slot`() {
-        val slot = firstFutureSlot()
-        val startAt = slotStartAtStr(slot)
-
-        val response = get("/slots/$startAt")
-
-        assertThat(response.status).isEqualTo(200)
-        assertThat(response.extractPath("status")).isEqualTo("FREE")
-        assertThat(response.extractPath("startAt")).isNotBlank()
-    }
-
-    @Test
-    fun `GET slot status is BOOKED after booking`() {
-        val slot = firstFutureSlot()
-        post("/bookings", validRequest(slotStartAtStr(slot)))
-
-        val startAt = slotStartAtStr(slot)
-        val response = get("/slots/$startAt")
-
-        assertThat(response.status).isEqualTo(200)
-        assertThat(response.extractPath("status")).isEqualTo("BOOKED")
-    }
-
-    @Test
-    fun `GET slot 404 for non-existent startAt`() {
-        val nonExistent = OffsetDateTime.now().plusDays(1).withSecond(37)
-        val startAt = nonExistent.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)
-
-        val response = get("/slots/$startAt")
-
-        assertThat(response.status).isEqualTo(404)
-    }
-
-    @Test
-    fun `GET slot status is PAST for past slot`() {
-        val pastStart = OffsetDateTime.now().minusDays(1)
-        val pastEnd = pastStart.plusMinutes(props.slotMinutes.toLong())
-        dsl.insertInto(SLOTS, SLOTS.START_AT, SLOTS.END_AT)
-            .values(pastStart, pastEnd)
-            .onConflictDoNothing()
-            .execute()
-
-        val response = get("/slots/${pastStart.format(DateTimeFormatter.ISO_OFFSET_DATE_TIME)}")
-
-        assertThat(response.status).isEqualTo(200)
-        assertThat(response.extractPath("status")).isEqualTo("PAST")
-    }
-
-    @Test
-    fun `GET slot 200 does NOT expose booking details for booked slot`() {
-        val slot = firstFutureSlot()
-        post("/bookings", validRequest(slotStartAtStr(slot)))
-
-        val startAt = slotStartAtStr(slot)
-        val response = get("/slots/$startAt")
-
-        assertThat(response.status).isEqualTo(200)
-        assertThat(response.extractPath("status")).isEqualTo("BOOKED")
-        assertThat(response.extractPath("booking")).isNull()
-    }
-
-    @Test
     fun `POST bookings 201 with null description`() {
-        val slot = firstFutureSlot()
-
-        val response = post("/bookings", mapOf(
-            "startAt" to slotStartAtStr(slot),
-            "name" to "Сергей",
-            "meetingLink" to "https://meet.example.com/null-desc"
-        ))
+        val id = createEventType()
+        val response = post("/bookings", request(id, slotStart(), description = null))
 
         assertThat(response.status).isEqualTo(201)
     }
 
     @Test
     fun `POST bookings 400 when meetingLink is empty`() {
-        val slot = firstFutureSlot()
-
-        val response = post("/bookings", mapOf(
-            "startAt" to slotStartAtStr(slot),
-            "name" to "Анна",
-            "meetingLink" to ""
-        ))
+        val id = createEventType()
+        val response = post("/bookings", request(id, slotStart(), meetingLink = ""))
 
         assertThat(response.status).isEqualTo(400)
         assertThat(response.extractPath("errorCode")).isEqualTo("VALIDATION_FAILED")
@@ -334,30 +239,22 @@ class BookingApiTest : AbstractIntegrationTest() {
 
     @Test
     fun `POST bookings 201 when meetingLink is exactly maxLength 2048`() {
-        val slot = firstFutureSlot()
+        val id = createEventType()
         val prefix = "https://meet.example.com/"
         val longLink = prefix + "a".repeat(2048 - prefix.length)
 
-        val response = post("/bookings", mapOf(
-            "startAt" to slotStartAtStr(slot),
-            "name" to "Анна",
-            "meetingLink" to longLink
-        ))
+        val response = post("/bookings", request(id, slotStart(), meetingLink = longLink))
 
         assertThat(response.status).isEqualTo(201)
     }
 
     @Test
     fun `POST bookings 400 when meetingLink exceeds maxLength 2048`() {
-        val slot = firstFutureSlot()
+        val id = createEventType()
         val prefix = "https://meet.example.com/"
         val longLink = prefix + "a".repeat(2049 - prefix.length)
 
-        val response = post("/bookings", mapOf(
-            "startAt" to slotStartAtStr(slot),
-            "name" to "Анна",
-            "meetingLink" to longLink
-        ))
+        val response = post("/bookings", request(id, slotStart(), meetingLink = longLink))
 
         assertThat(response.status).isEqualTo(400)
         assertThat(response.extractPath("errorCode")).isEqualTo("VALIDATION_FAILED")
@@ -365,180 +262,30 @@ class BookingApiTest : AbstractIntegrationTest() {
 
     @Test
     fun `POST bookings 201 when description is exactly maxLength 2000`() {
-        val slot = firstFutureSlot()
-
-        val response = post("/bookings", mapOf(
-            "startAt" to slotStartAtStr(slot),
-            "name" to "Анна",
-            "meetingLink" to "https://meet.example.com/test",
-            "description" to "D".repeat(2000)
-        ))
+        val id = createEventType()
+        val response = post("/bookings", request(id, slotStart(), description = "D".repeat(2000)))
 
         assertThat(response.status).isEqualTo(201)
     }
 
     @Test
     fun `POST bookings 400 when description exceeds maxLength 2000`() {
-        val slot = firstFutureSlot()
-
-        val response = post("/bookings", mapOf(
-            "startAt" to slotStartAtStr(slot),
-            "name" to "Анна",
-            "meetingLink" to "https://meet.example.com/test",
-            "description" to "D".repeat(2001)
-        ))
+        val id = createEventType()
+        val response = post("/bookings", request(id, slotStart(), description = "D".repeat(2001)))
 
         assertThat(response.status).isEqualTo(400)
         assertThat(response.extractPath("errorCode")).isEqualTo("VALIDATION_FAILED")
-    }
-
-    @Test
-    fun `GET slots startAt 400 for invalid date-time format`() {
-        val response = get("/slots/not-a-date-time")
-
-        assertThat(response.status).isEqualTo(400)
-        assertThat(response.extractPath("errorCode")).isEqualTo("MALFORMED_REQUEST")
     }
 
     @Test
     fun `Error response follows ProblemDetail format`() {
-        val response = get("/slots/not-a-date-time")
+        val response = post("/bookings", request(UUID.randomUUID(), slotStart()))
 
-        assertThat(response.status).isEqualTo(400)
-        assertThat(response.extractPath("status")).isEqualTo("400")
+        assertThat(response.status).isEqualTo(404)
+        assertThat(response.extractPath("status")).isEqualTo("404")
         assertThat(response.extractPath("errorCode")).isNotBlank()
         assertThat(response.extractPath("title")).isNotBlank()
         assertThat(response.extractPath("detail")).isNotBlank()
-    }
-
-    @Test
-    fun `POST bookings 201 for slot at midnight in owner timezone`() {
-        val slot = dsl.selectFrom(SLOTS)
-            .where(SLOTS.START_AT.gt(OffsetDateTime.now()))
-            .and(SLOTS.ID.notIn(dsl.select(BOOKINGS.SLOT_ID).from(BOOKINGS)))
-            .orderBy(SLOTS.START_AT)
-            .limit(1)
-            .fetchOne()!!
-
-        val response = post("/bookings", validBookingRequest(slot.startAt))
-
-        assertThat(response.status).isEqualTo(201)
-        val returnedStartAt = OffsetDateTime.parse(response.extractPath("startAt").toString())
-        assertThat(returnedStartAt).isEqualTo(slot.startAt)
-    }
-
-    @Test
-    fun `POST bookings 201 for slot at month boundary last to first day`() {
-        val ownerZone = ZoneId.of("Asia/Yerevan")
-        val lastDayOfMonth = LocalDate.now(ownerZone).withDayOfMonth(1).plusMonths(1).minusDays(1)
-        val firstSlotStart = ZonedDateTime.of(lastDayOfMonth, props.workStart, ownerZone).toOffsetDateTime()
-        val firstSlotEnd = firstSlotStart.plusMinutes(props.slotMinutes.toLong())
-        dsl.insertInto(SLOTS, SLOTS.START_AT, SLOTS.END_AT)
-            .values(firstSlotStart, firstSlotEnd)
-            .onConflictDoNothing()
-            .execute()
-
-        val response = post("/bookings", validBookingRequest(firstSlotStart))
-
-        assertThat(response.status).isEqualTo(201)
-    }
-
-    @Test
-    fun `GET calendar includes slots crossing month boundary`() {
-        val ownerZone = ZoneId.of("Asia/Yerevan")
-        val currentMonth = java.time.YearMonth.now(ownerZone)
-        val lastDayOfMonth = currentMonth.atEndOfMonth()
-        val lastSlotStart = ZonedDateTime.of(lastDayOfMonth, props.workStart, ownerZone).toOffsetDateTime()
-        val lastSlotEnd = lastSlotStart.plusMinutes(props.slotMinutes.toLong())
-        dsl.insertInto(SLOTS, SLOTS.START_AT, SLOTS.END_AT)
-            .values(lastSlotStart, lastSlotEnd)
-            .onConflictDoNothing()
-            .execute()
-
-        val response = get("/calendar?month=${currentMonth.toString()}")
-
-        assertThat(response.status).isEqualTo(200)
-        val days = response.extractList("days")
-        val lastDay = days.find { it.get("date")?.asText() == lastDayOfMonth.toString() }
-        assertThat(lastDay).isNotNull
-        val slots = lastDay?.get("slots")
-        assertThat(slots).isNotNull
-        assertThat(slots?.size()).isGreaterThan(0)
-    }
-
-    @Test
-    fun `GET calendar groups slots by correct day in owner timezone`() {
-        val ownerZone = ZoneId.of("Asia/Yerevan")
-        val currentMonth = java.time.YearMonth.now(ownerZone)
-        val lastDayOfMonth = currentMonth.atEndOfMonth()
-        val lastSlotStart = ZonedDateTime.of(lastDayOfMonth, props.workStart, ownerZone).toOffsetDateTime()
-        val lastSlotEnd = lastSlotStart.plusMinutes(props.slotMinutes.toLong())
-        dsl.insertInto(SLOTS, SLOTS.START_AT, SLOTS.END_AT)
-            .values(lastSlotStart, lastSlotEnd)
-            .onConflictDoNothing()
-            .execute()
-
-        val response = get("/calendar?month=${currentMonth.toString()}")
-
-        assertThat(response.status).isEqualTo(200)
-        val days = response.extractList("days")
-        val lastDay = days.find { it.get("date")?.asText() == lastDayOfMonth.toString() }
-        assertThat(lastDay).isNotNull
-        val slots = lastDay?.get("slots")
-        assertThat(slots).isNotNull
-        assertThat(slots?.size()).isGreaterThan(0)
-    }
-
-    @Test
-    fun `POST bookings 201 for slot today within working hours`() {
-        val today = LocalDate.now(props.zone)
-        val nowInTz = ZonedDateTime.now(props.zone)
-        val slotTime = if (nowInTz.hour < props.workStart.hour) {
-            ZonedDateTime.of(today, props.workStart, props.zone)
-        } else {
-            ZonedDateTime.of(today, props.workStart.plusHours(1), props.zone)
-        }
-        val todayStart = slotTime.toOffsetDateTime()
-        
-        if (todayStart.isBefore(OffsetDateTime.now())) {
-            return
-        }
-        
-        val todayEnd = todayStart.plusMinutes(props.slotMinutes.toLong())
-        dsl.insertInto(SLOTS, SLOTS.START_AT, SLOTS.END_AT)
-            .values(todayStart, todayEnd)
-            .onConflictDoNothing()
-            .execute()
-
-        val response = post("/bookings", validBookingRequest(todayStart))
-
-        assertThat(response.status).isEqualTo(201)
-    }
-
-    @Test
-    fun `Error response includes type field`() {
-        val response = get("/slots/not-a-date-time")
-
-        assertThat(response.status).isEqualTo(400)
         assertThat(response.extractPath("type")).isEqualTo("about:blank")
-    }
-
-    @Test
-    fun `Error response includes errors array for validation errors`() {
-        val slot = firstFutureSlot()
-
-        val response = post("/bookings", mapOf(
-            "startAt" to slotStartAtStr(slot),
-            "name" to "",
-            "meetingLink" to "https://meet.example.com/test"
-        ))
-
-        assertThat(response.status).isEqualTo(400)
-        assertThat(response.extractPath("errorCode")).isEqualTo("VALIDATION_FAILED")
-        val errors = response.extractList("errors")
-        assertThat(errors).isNotEmpty()
-        val error = errors.first()
-        assertThat(error.get("field")?.asText()).isEqualTo("name")
-        assertThat(error.get("message")?.asText()).isNotBlank()
     }
 }

@@ -27,13 +27,13 @@ services:
       DB_PASSWORD: booking
       OWNER_TZ: Asia/Yerevan
       WORKING_HOURS: "09:00-18:00"
-      SLOT_MINUTES: "30"
-      BOOKING_HORIZON_DAYS: "31"
+      GRID_MINUTES: "15"
+      BOOKING_HORIZON_DAYS: "14"
     depends_on:
       postgres:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/api/v1/actuator/health || exit 1"]
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 10

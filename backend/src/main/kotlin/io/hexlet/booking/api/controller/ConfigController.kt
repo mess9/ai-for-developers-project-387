@@ -19,11 +19,11 @@ class ConfigController(private val props: BookingProperties) : ConfigApi {
         ResponseEntity.ok(
             Config(
                 ownerTimeZone = props.ownerTz,
-                workingHours  = WorkingHours(
+                workingHours = WorkingHours(
                     start = props.workStart.format(HH_MM),
-                    end   = props.workEnd.format(HH_MM),
+                    end = props.workEnd.format(HH_MM),
                 ),
-                slotMinutes = props.slotMinutes,
+                gridMinutes = props.gridMinutes,
                 horizonDays = props.horizonDays,
             )
         )

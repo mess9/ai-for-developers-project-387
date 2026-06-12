@@ -20,8 +20,8 @@ spring:
 booking:
   owner-tz: ${OWNER_TZ:Asia/Yerevan}
   working-hours: ${WORKING_HOURS:09:00-18:00}
-  slot-minutes: ${SLOT_MINUTES:30}
-  horizon-days: ${BOOKING_HORIZON_DAYS:31}
+  grid-minutes: ${GRID_MINUTES:15}
+  horizon-days: ${BOOKING_HORIZON_DAYS:14}
 
 # Сгенерированные интерфейсы имеют @RequestMapping("${api.base-path:/api/v1}").
 api:

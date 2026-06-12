@@ -39,12 +39,22 @@ export function getAvailability(eventTypeId: string): Promise<Availability> {
 }
 
 /**
- * Детерминированный выбор слота: первый свободный слот первого дня окна, в
- * котором есть свободные слоты. Так тест не зависит от текущей даты/времени.
+ * Детерминированный выбор слота: первый свободный слот первого «стабильного» дня
+ * окна — то есть дня строго после сегодняшнего, в котором есть свободные слоты.
+ *
+ * Сегодня намеренно пропускаем: текущий день частично «съеден» временем суток
+ * (прошедшие слоты отфильтрованы), и к вечеру у него может не остаться слотов —
+ * особенно у длинных типов. Из-за этого кнопка дня в календаре становится
+ * неактивной, и навигация по нему виснет до таймаута теста. Любой будущий день
+ * окна свободен на все рабочие часы, поэтому выбор не зависит ни от времени
+ * суток, ни от скорости раннера: день всегда навигабелен и наполнен слотами.
  */
 export async function findFirstFreeSlot(eventTypeId: string): Promise<DatedSlot> {
   const availability = await getAvailability(eventTypeId)
-  const day = availability.days.find((d) => d.hasFreeSlots && d.slots.length > 0)
-  if (!day) throw new Error(`Нет свободных слотов для типа ${eventTypeId}`)
+  const today = availability.days[0]?.date
+  const day = availability.days.find(
+    (d) => d.date !== today && d.hasFreeSlots && d.slots.length > 0,
+  )
+  if (!day) throw new Error(`Нет свободных слотов на будущих днях для типа ${eventTypeId}`)
   return { date: day.date, ...day.slots[0] }
 }

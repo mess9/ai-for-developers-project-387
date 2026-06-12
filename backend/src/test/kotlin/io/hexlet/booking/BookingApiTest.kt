@@ -83,6 +83,35 @@ class BookingApiTest : AbstractIntegrationTest() {
     }
 
     @Test
+    fun `POST bookings concurrent same slot yields exactly one success rest 409`() {
+        val id = createEventType(durationMinutes = 30)
+        val start = slotStart()
+        val threads = 8
+
+        // Все потоки стартуют одновременно (барьер) — настоящая гонка за один слот.
+        // In-memory pre-check у всех видит пустоту, до БД доходят INSERT'ы, и
+        // EXCLUDE-констрейнт пропускает ровно один (остальным 23P01 → 409).
+        val barrier = java.util.concurrent.CyclicBarrier(threads)
+        val pool = java.util.concurrent.Executors.newFixedThreadPool(threads)
+        try {
+            val statuses = (1..threads)
+                .map { i ->
+                    pool.submit<Int> {
+                        barrier.await()
+                        post("/bookings", request(id, start, name = "Гость $i")).status
+                    }
+                }
+                .map { it.get() }
+
+            assertThat(statuses.count { it == 201 }).isEqualTo(1)
+            assertThat(statuses.count { it == 409 }).isEqualTo(threads - 1)
+            assertThat(dsl.fetchCount(BOOKINGS)).isEqualTo(1)
+        } finally {
+            pool.shutdown()
+        }
+    }
+
+    @Test
     fun `POST bookings 404 when event type not found`() {
         val response = post("/bookings", request(UUID.randomUUID(), slotStart()))
 

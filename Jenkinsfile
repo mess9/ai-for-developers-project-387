@@ -1,6 +1,10 @@
 pipeline {
     agent any
 
+    options {
+        ansiColor('xterm')
+    }
+
     environment {
         IMAGE_NAME  = "localhost:5000/mess9/booking"
         IMAGE_TAG   = "${env.BUILD_NUMBER}"
@@ -30,6 +34,7 @@ pipeline {
         }
 
         stage('Push image') {
+            when { branch 'main' }
             steps {
                 sh '''
                     docker push $IMAGE_NAME:$IMAGE_TAG
@@ -39,16 +44,14 @@ pipeline {
         }
 
         stage('Deploy') {
+            when { branch 'main' }
             steps {
                 sh """
                     mkdir -p $COMPOSE_DIR
                     cp deploy/docker/compose.yaml $COMPOSE_DIR/compose.yaml
 
                     cd $COMPOSE_DIR
-                    cat > .env <<EOF
-IMAGE_TAG=$IMAGE_TAG
-APP_HOST=$APP_HOST
-EOF
+                    printf 'IMAGE_TAG=%s\\nAPP_HOST=%s\\n' "$IMAGE_TAG" "$APP_HOST" > .env
 
                     docker compose pull
                     docker compose up -d --force-recreate
@@ -57,6 +60,7 @@ EOF
         }
 
         stage('Smoke test') {
+            when { branch 'main' }
             steps {
                 sh '''
                     for i in $(seq 1 30); do

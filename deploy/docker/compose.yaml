@@ -1,0 +1,56 @@
+services:
+  booking-db:
+    image: postgres:17-alpine
+    container_name: booking-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: booking
+      POSTGRES_USER: booking
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-booking}
+    networks:
+      - internal
+    volumes:
+      - booking_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U booking -d booking"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  booking:
+    image: localhost:5000/mess9/booking:${IMAGE_TAG}
+    container_name: booking
+    restart: unless-stopped
+    environment:
+      DB_URL: jdbc:postgresql://booking-db:5432/booking
+      DB_USER: booking
+      DB_PASSWORD: ${DB_PASSWORD:-booking}
+      OWNER_TZ: ${OWNER_TZ:-Asia/Yerevan}
+      WORKING_HOURS: ${WORKING_HOURS:-09:00-18:00}
+      GRID_MINUTES: ${GRID_MINUTES:-15}
+      BOOKING_HORIZON_DAYS: ${BOOKING_HORIZON_DAYS:-14}
+    networks:
+      - proxy
+      - internal
+    depends_on:
+      booking-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/actuator/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    labels:
+      - traefik.enable=true
+      - traefik.docker.network=proxy
+      - traefik.http.routers.booking.rule=Host(`${APP_HOST:-booking.fil-lost.org}`)
+      - traefik.http.routers.booking.entrypoints=web
+      - traefik.http.services.booking.loadbalancer.server.port=8080
+
+networks:
+  proxy:
+    external: true
+  internal:
+
+volumes:
+  booking_postgres_data:

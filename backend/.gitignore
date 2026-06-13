@@ -1,0 +1,10 @@
+.gradle/
+build/
+
+# Сгенерированный код (OpenAPI + jOOQ) — не коммитим, регенерируется при сборке
+# build/generated/openapi/
+# build/generated/jooq/
+
+# Локальная конфигурация IntelliJ IDEA
+.idea/
+*.iml

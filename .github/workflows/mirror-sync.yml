@@ -1,0 +1,19 @@
+name: mirror-sync
+
+# Push-driven зеркалирование: вместо опроса по интервалу GitHub на каждый push
+# в main дёргает у Gitea API mirror-sync, и Gitea немедленно подтягивает копию.
+# Дальше Gitea сама уведомляет Jenkins (вебхук) → сборка и деплой.
+on:
+  push:
+    branches: [main]
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      # Gitea-токен должен иметь право запускать mirror-sync для зеркала.
+      - name: Trigger Gitea mirror sync
+        run: |
+          curl -fsS -X POST \
+            "https://gitea.fil-lost.org/api/v1/repos/mess9/ai-for-developers-project-387/mirror-sync" \
+            -H "Authorization: token ${{ secrets.GITEA_TOKEN }}"

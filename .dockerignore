@@ -1,0 +1,8 @@
+# Сгенерированное и зависимости — не тащим в build context, всё генерится в образе
+**/node_modules
+**/build
+**/.gradle
+frontend/dist
+contract/tsp-output
+.idea
+.git

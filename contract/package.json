@@ -1,0 +1,15 @@
+{
+  "name": "booking-contract",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Источник правды API сервиса «Запись на звонок» (TypeSpec → OpenAPI).",
+  "scripts": {
+    "build": "tsp compile ."
+  },
+  "dependencies": {
+    "@typespec/compiler": "latest",
+    "@typespec/http": "latest",
+    "@typespec/openapi": "latest",
+    "@typespec/openapi3": "latest"
+  }
+}

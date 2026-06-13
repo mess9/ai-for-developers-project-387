@@ -1,0 +1,4 @@
+# Shell-скрипты всегда с LF — иначе CRLF ломает shebang в Linux-контейнере.
+*.sh text eol=lf
+docker/entrypoint.sh text eol=lf
+gradlew text eol=lf

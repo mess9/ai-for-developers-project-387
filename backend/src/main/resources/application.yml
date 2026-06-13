@@ -1,3 +1,7 @@
+# Порт берётся из ${PORT} (требование учебной платформы — она запускает контейнер с -e PORT).
+server:
+  port: ${PORT:8080}
+
 spring:
   application:
     name: booking

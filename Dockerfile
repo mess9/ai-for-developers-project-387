@@ -23,10 +23,16 @@ COPY backend/ ./
 COPY --from=frontend-build /frontend/dist /app/src/main/resources/static
 RUN --mount=type=cache,target=/gradle-cache ./gradlew bootJar --no-daemon
 
-# Stage 3: Runtime
-FROM eclipse-temurin:21-jre-alpine
+# Stage 3: Runtime — самодостаточный образ: PostgreSQL + JRE в одном контейнере.
+# Учебная платформа запускает ОДИН контейнер (`docker run -e PORT=... образ`) без внешней БД,
+# поэтому встроенный postgres обязателен. Миграция использует `EXCLUDE USING gist` — нужен
+# именно PostgreSQL (H2 не подойдёт). В compose внешняя БД задаётся через DB_URL — тогда
+# entrypoint встроенный postgres не поднимает.
+FROM postgres:17-alpine
 WORKDIR /app
-RUN apk add --no-cache curl
+RUN apk add --no-cache curl openjdk21-jre-headless
 COPY --from=backend-build /app/build/libs/*.jar app.jar
+COPY docker/entrypoint.sh /usr/local/bin/entrypoint.sh
+RUN chmod +x /usr/local/bin/entrypoint.sh
 EXPOSE 8080
-ENTRYPOINT ["java", "-jar", "app.jar"]
+ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

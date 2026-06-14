@@ -1,7 +1,10 @@
 import {beforeEach, describe, expect, it, vi} from 'vitest'
-import {render, screen, waitFor} from '@testing-library/react'
+import {render, screen, waitFor, within} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import {http, HttpResponse} from 'msw'
 import {AdminPage} from '../pages/AdminPage'
+import {sampleBooking} from './mocks/handlers'
+import {server} from './mocks/server'
 
 beforeEach(() => {
   localStorage.clear()
@@ -58,17 +61,42 @@ describe('AdminPage', () => {
     expect(screen.getByText('Предстоящие встречи')).toBeInTheDocument()
 
     const calendar = screen.getByText('Календарь встреч').closest('section')!
-    expect(calendar.parentElement).toHaveClass('md:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)]')
-    const bookedDays = calendar.querySelectorAll('button.cursor-pointer')
+    const calendarScope = within(calendar)
+    const bookedDays = calendarScope.getAllByRole('button', { name: /встреч: 1/ })
     expect(bookedDays.length).toBeGreaterThan(0)
-    const bookingBadges = Array.from(calendar.querySelectorAll('span'))
-    expect(bookingBadges.some((badge) => badge.classList.contains('right-1'))).toBe(true)
+    expect(within(bookedDays[0]).getByTestId('booking-count-badge')).toBeInTheDocument()
 
-    await user.click(bookedDays[0] as HTMLElement)
+    const emptyDay = calendarScope.getAllByRole('button', { name: /встреч: 0/ })[0]
+    expect(within(emptyDay).queryByTestId('booking-count-badge')).not.toBeInTheDocument()
+
+    await user.click(bookedDays[0])
     expect(screen.queryByText('Предстоящие встречи')).not.toBeInTheDocument()
     expect(screen.getByText('Показать все')).toBeInTheDocument()
+    expect(within(bookedDays[0]).getByTestId('booking-count-badge')).toBeInTheDocument()
 
     await user.click(screen.getByText('Показать все'))
     expect(screen.getByText('Предстоящие встречи')).toBeInTheDocument()
+  })
+
+  it('фильтрует встречи, когда в календаре один занятый день', async () => {
+    server.use(
+      http.get('/api/v1/admin/bookings', ({ request }) => {
+        if (request.headers.get('Authorization') !== 'Bearer test-token') {
+          return HttpResponse.json({ status: 401, errorCode: 'UNAUTHORIZED' }, { status: 401 })
+        }
+        return HttpResponse.json([sampleBooking])
+      }),
+    )
+    const user = await login()
+    await screen.findByText('Иван Гость')
+
+    const calendar = screen.getByText('Календарь встреч').closest('section')!
+    const bookedDays = within(calendar).getAllByRole('button', { name: /встреч: 1/ })
+    expect(bookedDays).toHaveLength(1)
+
+    await user.click(bookedDays[0])
+    expect(screen.getByRole('heading', { name: /Встречи за/ })).toBeInTheDocument()
+    expect(screen.getByText('Иван Гость')).toBeInTheDocument()
+    expect(screen.getByText('Показать все')).toBeInTheDocument()
   })
 })

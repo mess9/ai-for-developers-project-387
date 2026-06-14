@@ -16,7 +16,7 @@ class AvailabilityApiTest : AbstractIntegrationTest() {
             .set(BOOKINGS.END_AT, start.plusMinutes(durationMinutes))
             .set(BOOKINGS.NAME, "Гость")
             .set(BOOKINGS.MEETING_LINK, "https://meet.example.com/x")
-            .set(BOOKINGS.CREATED_AT, OffsetDateTime.now())
+            .set(BOOKINGS.CREATED_AT, OffsetDateTime.now(clock))
             .execute()
     }
 
@@ -58,7 +58,7 @@ class AvailabilityApiTest : AbstractIntegrationTest() {
         val days = response.extractList("days")
         // завтра гарантированно полностью в будущем → есть свободные слоты
         val tomorrow = days.find {
-            it.get("date").asText() == java.time.LocalDate.now(props.zone).plusDays(1).toString()
+            it.get("date").asText() == java.time.LocalDate.now(clock.withZone(props.zone)).plusDays(1).toString()
         }
         assertThat(tomorrow).isNotNull
         assertThat(tomorrow!!.get("hasFreeSlots").asBoolean()).isTrue()
@@ -77,7 +77,7 @@ class AvailabilityApiTest : AbstractIntegrationTest() {
 
         val days = response.extractList("days")
         val tomorrow = days.find {
-            it.get("date").asText() == java.time.LocalDate.now(props.zone).plusDays(1).toString()
+            it.get("date").asText() == java.time.LocalDate.now(clock.withZone(props.zone)).plusDays(1).toString()
         }!!
         val starts = tomorrow.get("slots").map { it.get("startAt").asText() }
         assertThat(starts).noneMatch { OffsetDateTime.parse(it).isEqual(start) }
@@ -92,7 +92,7 @@ class AvailabilityApiTest : AbstractIntegrationTest() {
 
         val days = response.extractList("days")
         val tomorrow = days.find {
-            it.get("date").asText() == java.time.LocalDate.now(props.zone).plusDays(1).toString()
+            it.get("date").asText() == java.time.LocalDate.now(clock.withZone(props.zone)).plusDays(1).toString()
         }!!
         // ни один слот не выходит за рабочие часы
         assertThat(tomorrow.get("slots").all {

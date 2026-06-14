@@ -11,6 +11,8 @@ import org.jooq.DSLContext
 import org.springframework.stereotype.Service
 import org.springframework.transaction.annotation.Transactional
 import java.net.URI
+import java.time.Clock
+import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZonedDateTime
 import java.util.*
@@ -20,6 +22,7 @@ class BookingService(
     private val dsl: DSLContext,
     private val eventTypeService: EventTypeService,
     private val props: BookingProperties,
+    private val clock: Clock,
 ) {
     /**
      * Лестница проверок со стопом на первом провале:
@@ -54,12 +57,12 @@ class BookingService(
         }
 
         // 4. Не прошлое.
-        if (start.isBefore(OffsetDateTime.now())) {
+        if (start.isBefore(OffsetDateTime.now(clock))) {
             throw SlotInPastException()
         }
 
         // 5. В горизонте: дата старта в OWNER_TZ ≤ сегодня + horizonDays.
-        val today = OffsetDateTime.now(zone).toLocalDate()
+        val today = LocalDate.now(clock.withZone(zone))
         if (localStart.toLocalDate().isAfter(today.plusDays(props.horizonDays.toLong()))) {
             throw SlotOutOfHorizonException()
         }
@@ -124,7 +127,7 @@ class BookingService(
         )
             .from(BOOKINGS)
             .join(EVENT_TYPES).on(EVENT_TYPES.ID.eq(BOOKINGS.EVENT_TYPE_ID))
-            .where(BOOKINGS.END_AT.gt(OffsetDateTime.now()))
+            .where(BOOKINGS.END_AT.gt(OffsetDateTime.now(clock)))
             .orderBy(BOOKINGS.START_AT)
             .fetch { r ->
                 Booking(

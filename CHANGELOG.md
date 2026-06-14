@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.2](https://github.com/mess9/ai-for-developers-project-387/compare/v1.0.1...v1.0.2) (2026-06-14)
+
+
+### Bug Fixes
+
+* **docker:** support single-container run ([d8b479b](https://github.com/mess9/ai-for-developers-project-387/commit/d8b479bd5024e711a232a31b7e0794ca0d60c5c3))
+* **docker:** support single-container run ([0870973](https://github.com/mess9/ai-for-developers-project-387/commit/08709738a7a1659023277c1008c506ce4666e8ec))
+
 ## [1.0.1](https://github.com/mess9/ai-for-developers-project-387/compare/v1.0.0...v1.0.1) (2026-06-14)
 
 

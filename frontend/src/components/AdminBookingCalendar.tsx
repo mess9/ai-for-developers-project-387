@@ -103,7 +103,7 @@ function MonthGrid({monthDate, bookingsByDate, windowDates, selectedDate, onSele
               onClick={() => clickable && onSelectDate(dateStr)}
               disabled={!clickable}
               aria-pressed={isSelected}
-              aria-label={`${dateStr}, встреч: ${count}`}
+              aria-label={clickable ? `${dateStr}, встреч: ${count}` : dateStr}
               className={[
                 'h-12 rounded border text-sm transition relative',
                 isSelected

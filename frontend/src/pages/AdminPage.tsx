@@ -184,7 +184,7 @@ export function AdminPage() {
         </section>
 
         <div className="grid gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)] lg:items-start">
-          <section>
+          <section aria-label="Календарь встреч">
             <h2 className="text-xl font-bold mb-3">Календарь встреч</h2>
             <AdminBookingCalendar
               bookings={bookings}

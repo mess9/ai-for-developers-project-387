@@ -19,7 +19,7 @@ async function login() {
 describe('AdminPage', () => {
   it('вход по токену, показ типов и встреч', async () => {
     await login()
-    expect(await screen.findByText('Deep dive')).toBeInTheDocument()
+    expect(await screen.findAllByText('Deep dive')).toHaveLength(2)
     expect(await screen.findByText('Иван Гость')).toBeInTheDocument()
   })
 
@@ -38,7 +38,7 @@ describe('AdminPage', () => {
     const user = await login()
     await screen.findByText('Иван Гость')
 
-    await user.click(screen.getByRole('button', { name: 'Отменить' }))
+    await user.click(screen.getAllByRole('button', { name: 'Отменить' })[0])
     expect(await screen.findByText('Бронь отменена')).toBeInTheDocument()
   })
 
@@ -48,5 +48,24 @@ describe('AdminPage', () => {
     await waitFor(() =>
       expect(screen.getByRole('heading', { name: 'Вход для владельца' })).toBeInTheDocument(),
     )
+  })
+
+  it('календарь отображает занятые даты и фильтрует встречи по клику', async () => {
+    const user = await login()
+    await screen.findByText('Иван Гость')
+
+    expect(screen.getByText('Календарь встреч')).toBeInTheDocument()
+    expect(screen.getByText('Предстоящие встречи')).toBeInTheDocument()
+
+    const calendar = screen.getByText('Календарь встреч').closest('section')!
+    const bookedDays = calendar.querySelectorAll('button.cursor-pointer')
+    expect(bookedDays.length).toBeGreaterThan(0)
+
+    await user.click(bookedDays[0] as HTMLElement)
+    expect(screen.queryByText('Предстоящие встречи')).not.toBeInTheDocument()
+    expect(screen.getByText('Показать все')).toBeInTheDocument()
+
+    await user.click(screen.getByText('Показать все'))
+    expect(screen.getByText('Предстоящие встречи')).toBeInTheDocument()
   })
 })

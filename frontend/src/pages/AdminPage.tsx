@@ -1,7 +1,9 @@
 import {useCallback, useEffect, useState} from 'react'
+import {formatInTimeZone} from 'date-fns-tz'
 import {useConfig} from '../hooks/useConfig'
 import {adminClient} from '../api/client'
 import type {components} from '../api/types'
+import {AdminBookingCalendar} from '../components/AdminBookingCalendar'
 import {EventTypeForm} from '../components/EventTypeForm'
 import {BookingsList} from '../components/BookingsList'
 import {Toast} from '../components/Toast'
@@ -17,6 +19,7 @@ export function AdminPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(!!localStorage.getItem('adminToken'))
   const [eventTypes, setEventTypes] = useState<EventType[]>([])
   const [bookings, setBookings] = useState<Booking[]>([])
+  const [selectedDate, setSelectedDate] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
 
   const logout = useCallback((message?: string) => {
@@ -180,13 +183,49 @@ export function AdminPage() {
           )}
         </section>
 
-        <section>
-          <h2 className="text-xl font-bold mb-3">Предстоящие встречи</h2>
-          <BookingsList
+        <section className="mb-8">
+          <h2 className="text-xl font-bold mb-3">Календарь встреч</h2>
+          <AdminBookingCalendar
             bookings={bookings}
+            selectedDate={selectedDate}
+            onSelectDate={(date) => setSelectedDate((prev) => (prev === date ? null : date))}
             ownerTimeZone={config.ownerTimeZone}
-            onCancel={handleCancel}
+            horizonDays={config.horizonDays}
           />
+        </section>
+
+        <section>
+          <div className="flex items-baseline gap-3 mb-3">
+            <h2 className="text-xl font-bold">
+              {selectedDate ? `Встречи за ${selectedDate}` : 'Предстоящие встречи'}
+            </h2>
+            {selectedDate && (
+              <button
+                type="button"
+                onClick={() => setSelectedDate(null)}
+                className="text-sm text-blue-600 hover:underline"
+              >
+                Показать все
+              </button>
+            )}
+          </div>
+          {selectedDate ? (
+            <BookingsList
+              bookings={bookings.filter(
+                (b) =>
+                  formatInTimeZone(new Date(b.startAt), config.ownerTimeZone, 'yyyy-MM-dd') ===
+                  selectedDate,
+              )}
+              ownerTimeZone={config.ownerTimeZone}
+              onCancel={handleCancel}
+            />
+          ) : (
+            <BookingsList
+              bookings={bookings}
+              ownerTimeZone={config.ownerTimeZone}
+              onCancel={handleCancel}
+            />
+          )}
         </section>
       </div>
 

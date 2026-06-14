@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.0.1](https://github.com/mess9/ai-for-developers-project-387/compare/v1.0.0...v1.0.1) (2026-06-14)
+
+
+### Performance Improvements
+
+* **build:** cache Gradle/npm deps via BuildKit cache mounts ([08e3f83](https://github.com/mess9/ai-for-developers-project-387/commit/08e3f837499ae60bcdac5ebe7a8ca1e551812509))
+* **build:** кеш Gradle/npm через BuildKit cache mounts ([b34d201](https://github.com/mess9/ai-for-developers-project-387/commit/b34d201b93cfc06ef49e952384831f3900b3b91a))
+
 ## 1.0.0 (2026-06-12)
 
 

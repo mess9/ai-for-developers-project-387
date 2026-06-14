@@ -34,3 +34,4 @@ jobs:
             Review this pull request.
             Focus on bugs, behavioral regressions, missing tests, and maintainability risks.
             Prefer concise, actionable comments with file and line references where possible.
+            Все замечания формулируй на русском языке.

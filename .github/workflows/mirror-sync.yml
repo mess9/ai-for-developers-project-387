@@ -14,17 +14,6 @@ jobs:
       # Gitea-токен должен иметь право запускать mirror-sync для зеркала.
       - name: Trigger Gitea mirror sync
         run: |
-          response="$(mktemp)"
-          status="$(curl -sS -o "$response" -w "%{http_code}" -X POST \
+          curl -fsS -X POST \
             "https://gitea.fil-lost.org/api/v1/repos/mess9/ai-for-developers-project-387/mirror-sync" \
-            -H "Authorization: token ${{ secrets.GITEA_TOKEN }}")"
-
-          echo "Gitea mirror sync HTTP status: $status"
-          if [ -s "$response" ]; then
-            echo "Gitea mirror sync response:"
-            cat "$response"
-          fi
-
-          if [ "$status" -lt 200 ] || [ "$status" -ge 300 ]; then
-            exit 1
-          fi
+            -H "Authorization: token ${{ secrets.GITEA_TOKEN }}"

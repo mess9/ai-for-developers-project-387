@@ -58,8 +58,11 @@ describe('AdminPage', () => {
     expect(screen.getByText('Предстоящие встречи')).toBeInTheDocument()
 
     const calendar = screen.getByText('Календарь встреч').closest('section')!
+    expect(calendar.parentElement).toHaveClass('md:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)]')
     const bookedDays = calendar.querySelectorAll('button.cursor-pointer')
     expect(bookedDays.length).toBeGreaterThan(0)
+    const bookingBadges = Array.from(calendar.querySelectorAll('span'))
+    expect(bookingBadges.some((badge) => badge.classList.contains('right-1'))).toBe(true)
 
     await user.click(bookedDays[0] as HTMLElement)
     expect(screen.queryByText('Предстоящие встречи')).not.toBeInTheDocument()

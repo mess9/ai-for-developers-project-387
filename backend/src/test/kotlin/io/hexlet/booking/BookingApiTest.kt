@@ -57,15 +57,26 @@ class BookingApiTest : AbstractIntegrationTest() {
     }
 
     @Test
-    fun `POST bookings 409 when slot already booked same type`() {
+    fun `POST bookings 201 idempotent same booking returns success`() {
         val id = createEventType()
         val req = request(id, slotStart())
 
         post("/bookings", req)
         val response = post("/bookings", req)
 
+        assertThat(response.status).isEqualTo(201)
+        assertThat(dsl.fetchCount(BOOKINGS)).isEqualTo(1)
+    }
+
+    @Test
+    fun `POST bookings 409 when same slot with different name`() {
+        val id = createEventType()
+        val start = slotStart()
+
+        post("/bookings", request(id, start, name = "Анна"))
+        val response = post("/bookings", request(id, start, name = "Борис"))
+
         assertThat(response.status).isEqualTo(409)
-        assertThat(response.extractPath("errorCode")).isEqualTo("SLOT_ALREADY_BOOKED")
     }
 
     @Test

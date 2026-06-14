@@ -64,7 +64,26 @@ class BookingService(
             throw SlotOutOfHorizonException()
         }
 
-        // 6. Pre-check пересечения — чистый 409 без отлова исключения.
+        // 6a. Идемпотентность: повтор идентичной брони возвращает существующую.
+        val existing = dsl.selectFrom(BOOKINGS)
+            .where(BOOKINGS.EVENT_TYPE_ID.eq(eventType.id))
+            .and(BOOKINGS.START_AT.eq(start))
+            .and(BOOKINGS.NAME.eq(request.name))
+            .and(BOOKINGS.MEETING_LINK.eq(request.meetingLink))
+            .fetchOne()
+        if (existing != null) {
+            return BookingConfirmation(
+                eventTypeName = eventType.name,
+                startAt = existing.startAt,
+                endAt = existing.endAt,
+                name = existing.name,
+                meetingLink = existing.meetingLink,
+                createdAt = existing.createdAt,
+                description = existing.description,
+            )
+        }
+
+        // 6b. Pre-check пересечения — чистый 409 без отлова исключения.
         val overlaps = dsl.fetchExists(
             dsl.selectFrom(BOOKINGS)
                 .where(BOOKINGS.START_AT.lt(end)).and(BOOKINGS.END_AT.gt(start))

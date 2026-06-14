@@ -84,6 +84,8 @@ export const sampleBookings = [
 
 export const sampleBooking = sampleBookings[0]
 
+const bookingsMap = new Map<string, unknown>()
+
 export const handlers = [
   http.get('/api/v1/config', () => HttpResponse.json(baseConfig)),
 
@@ -104,18 +106,22 @@ export const handlers = [
   http.post('/api/v1/bookings', async ({ request }) => {
     const body = (await request.json()) as { eventTypeId: string; startAt: string; name: string; meetingLink: string; description?: string }
     const type = [introType, deepType].find((t) => t.id === body.eventTypeId)
-    return HttpResponse.json(
-      {
-        eventTypeName: type?.name ?? 'Intro call',
-        startAt: body.startAt,
-        endAt: body.startAt,
-        name: body.name,
-        meetingLink: body.meetingLink,
-        description: body.description ?? null,
-        createdAt: new Date().toISOString(),
-      },
-      { status: 201 },
-    )
+    const bookingKey = `${body.eventTypeId}::${body.startAt}::${body.name}::${body.meetingLink}`
+    const existing = bookingsMap.get(bookingKey)
+    if (existing) {
+      return HttpResponse.json(existing, { status: 201 })
+    }
+    const confirmation = {
+      eventTypeName: type?.name ?? 'Intro call',
+      startAt: body.startAt,
+      endAt: body.startAt,
+      name: body.name,
+      meetingLink: body.meetingLink,
+      description: body.description ?? null,
+      createdAt: new Date().toISOString(),
+    }
+    bookingsMap.set(bookingKey, confirmation)
+    return HttpResponse.json(confirmation, { status: 201 })
   }),
 
   // ── Admin ──

@@ -29,7 +29,7 @@ class AdminApiTest : AbstractIntegrationTest() {
             .set(BOOKINGS.NAME, name)
             .set(BOOKINGS.MEETING_LINK, "https://meet.example.com/test")
             .set(BOOKINGS.DESCRIPTION, "Тестовое описание")
-            .set(BOOKINGS.CREATED_AT, OffsetDateTime.now())
+            .set(BOOKINGS.CREATED_AT, OffsetDateTime.now(clock))
             .execute()
         return id
     }
@@ -99,7 +99,7 @@ class AdminApiTest : AbstractIntegrationTest() {
 
         val before = get("/event-types/$eventTypeId/availability")
         val tomorrowBefore = before.extractList("days").first {
-            it.get("date").asText() == java.time.LocalDate.now(props.zone).plusDays(1).toString()
+            it.get("date").asText() == java.time.LocalDate.now(clock.withZone(props.zone)).plusDays(1).toString()
         }
         assertThat(tomorrowBefore.get("slots").map { it.get("startAt").asText() })
             .noneMatch { OffsetDateTime.parse(it).isEqual(start) }
@@ -108,7 +108,7 @@ class AdminApiTest : AbstractIntegrationTest() {
 
         val after = get("/event-types/$eventTypeId/availability")
         val tomorrowAfter = after.extractList("days").first {
-            it.get("date").asText() == java.time.LocalDate.now(props.zone).plusDays(1).toString()
+            it.get("date").asText() == java.time.LocalDate.now(clock.withZone(props.zone)).plusDays(1).toString()
         }
         assertThat(tomorrowAfter.get("slots").map { it.get("startAt").asText() })
             .anyMatch { OffsetDateTime.parse(it).isEqual(start) }

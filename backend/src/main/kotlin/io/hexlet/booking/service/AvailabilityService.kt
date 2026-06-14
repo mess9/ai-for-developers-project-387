@@ -7,6 +7,8 @@ import io.hexlet.booking.model.AvailabilityDay
 import io.hexlet.booking.model.AvailableSlot
 import org.jooq.DSLContext
 import org.springframework.stereotype.Service
+import java.time.Clock
+import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZonedDateTime
 import java.util.*
@@ -19,6 +21,7 @@ class AvailabilityService(
     private val dsl: DSLContext,
     private val eventTypeService: EventTypeService,
     private val props: BookingProperties,
+    private val clock: Clock,
 ) {
     /**
      * Доступность типа события на окно «сегодня…сегодня+horizonDays» (по датам в OWNER_TZ).
@@ -29,8 +32,8 @@ class AvailabilityService(
         val duration = eventType.durationMinutes.toLong()
 
         val zone = props.zone
-        val today = OffsetDateTime.now(zone).toLocalDate()
-        val now = OffsetDateTime.now()
+        val today = LocalDate.now(clock.withZone(zone))
+        val now = OffsetDateTime.now(clock)
 
         // Границы окна в UTC: от начала сегодняшнего дня до начала дня после последнего.
         val windowStart = today.atStartOfDay(zone).toOffsetDateTime()

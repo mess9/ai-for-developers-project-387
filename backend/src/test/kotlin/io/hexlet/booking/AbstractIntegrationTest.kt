@@ -10,12 +10,19 @@ import org.jooq.DSLContext
 import org.junit.jupiter.api.BeforeEach
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.boot.test.context.SpringBootTest
+import org.springframework.boot.test.context.TestConfiguration
 import org.springframework.boot.test.web.server.LocalServerPort
+import org.springframework.context.annotation.Bean
+import org.springframework.context.annotation.Import
+import org.springframework.context.annotation.Primary
 import org.springframework.test.context.DynamicPropertyRegistry
 import org.springframework.test.context.DynamicPropertySource
 import org.testcontainers.postgresql.PostgreSQLContainer
+import java.time.Clock
+import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
+import java.time.ZoneOffset
 import java.time.ZonedDateTime
 import java.util.*
 
@@ -23,7 +30,11 @@ private val postgres = PostgreSQLContainer("postgres:17-alpine").apply {
     start()
 }
 
-@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@SpringBootTest(
+    webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
+    properties = ["spring.main.allow-bean-definition-overriding=true"]
+)
+@Import(AbstractIntegrationTest.TestClockConfig::class)
 abstract class AbstractIntegrationTest {
 
     @LocalServerPort
@@ -34,6 +45,9 @@ abstract class AbstractIntegrationTest {
 
     @Autowired
     protected lateinit var props: BookingProperties
+
+    @Autowired
+    protected lateinit var clock: Clock
 
     protected lateinit var client: HttpHandler
     protected lateinit var baseUrl: String
@@ -111,10 +125,17 @@ abstract class AbstractIntegrationTest {
      */
     protected fun slotStart(daysAhead: Long = 1, slotIndex: Long = 0): OffsetDateTime =
         ZonedDateTime.of(
-            LocalDate.now(props.zone).plusDays(daysAhead),
+            LocalDate.now(clock.withZone(props.zone)).plusDays(daysAhead),
             props.workStart.plusMinutes(props.gridMinutes.toLong() * slotIndex),
             props.zone,
         ).toOffsetDateTime()
+
+    @TestConfiguration
+    class TestClockConfig {
+        @Bean
+        @Primary
+        fun clock(): Clock = Clock.fixed(Instant.parse("2026-06-14T12:00:00Z"), ZoneOffset.UTC)
+    }
 
     companion object {
         @DynamicPropertySource

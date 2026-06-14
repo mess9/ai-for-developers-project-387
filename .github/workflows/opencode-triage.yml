@@ -7,10 +7,9 @@ on:
 jobs:
   triage:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     permissions:
-      id-token: write
-      contents: write
-      pull-requests: write
+      contents: read
       issues: write
     steps:
       - name: Check account age
@@ -42,6 +41,9 @@ jobs:
           prompt: |
             Review the newly opened issue in this repository.
             Respond in the same language as the issue.
+            This workflow is for triage comments only.
+            Do not edit files, create commits, create branches, open pull requests, or run long investigations.
+
             If the issue is clear and actionable:
             - Comment with a concise triage summary, likely area, and suggested next step.
 

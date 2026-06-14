@@ -10,7 +10,7 @@ concurrency:
 
 jobs:
   review:
-    if: github.event.pull_request.draft == false
+    if: github.event.pull_request.draft == false && github.actor != 'opencode-agent[bot]'
     runs-on: ubuntu-latest
     permissions:
       contents: read

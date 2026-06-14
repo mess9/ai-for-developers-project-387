@@ -2,8 +2,8 @@ name: lighthouse
 
 on:
   # 16:00 Asia/Yerevan = 12:00 UTC. Armenia does not use daylight saving time.
-  schedule:
-    - cron: "0 12 * * *"
+#  schedule:
+#    - cron: "0 12 * * *"
   workflow_dispatch:
 
 jobs:

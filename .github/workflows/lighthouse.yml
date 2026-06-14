@@ -1,0 +1,104 @@
+name: lighthouse
+
+on:
+  # 16:00 Asia/Yerevan = 12:00 UTC. Armenia does not use daylight saving time.
+  schedule:
+    - cron: "0 12 * * *"
+  workflow_dispatch:
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Start application
+        run: docker compose up --build -d --wait
+
+      - name: Install Lighthouse CLI
+        run: npm install --global lighthouse@latest
+
+      - name: Run Lighthouse CLI
+        run: |
+          mkdir -p reports
+          lighthouse http://localhost:8081 \
+            --chrome-flags="--headless --no-sandbox" \
+            --output=html \
+            --output-path=reports/lighthouse-report.html
+          lighthouse http://localhost:8081 \
+            --chrome-flags="--headless --no-sandbox" \
+            --output=json \
+            --output-path=reports/lighthouse-report.json
+
+      - name: Record recommended fixes
+        run: |
+          node <<'NODE'
+          const fs = require('fs');
+
+          const report = JSON.parse(fs.readFileSync('reports/lighthouse-report.json', 'utf8'));
+          const categories = Object.values(report.categories ?? {})
+            .map((category) => `| ${category.title} | ${Math.round((category.score ?? 0) * 100)} |`)
+            .join('\n');
+          const audits = Object.values(report.audits ?? {})
+            .filter((audit) => typeof audit.score === 'number' && audit.score < 1)
+            .sort((left, right) => {
+              const leftSavings = left.details?.overallSavingsMs ?? left.details?.overallSavingsBytes ?? 0;
+              const rightSavings = right.details?.overallSavingsMs ?? right.details?.overallSavingsBytes ?? 0;
+              return rightSavings - leftSavings;
+            })
+            .slice(0, 20);
+
+          const lines = [
+            '# Lighthouse report',
+            '',
+            `URL: ${report.finalDisplayedUrl ?? report.finalUrl}`,
+            `Generated: ${report.fetchTime}`,
+            '',
+            '## Scores',
+            '',
+            '| Category | Score |',
+            '| --- | ---: |',
+            categories,
+            '',
+            '## Recommended fixes',
+            '',
+          ];
+
+          if (audits.length === 0) {
+            lines.push('No Lighthouse recommendations were found.');
+          } else {
+            for (const audit of audits) {
+              const displayValue = audit.displayValue ? ` (${audit.displayValue})` : '';
+              const score = Math.round(audit.score * 100);
+              const description = audit.description
+                ? ` Recommendation: ${audit.description.replace(/\[([^\]]+)\]\([^)]+\)/g, '$1')}`
+                : '';
+              lines.push(`- ${audit.title}${displayValue}. Score: ${score}. Audit: ${audit.id}.${description}`);
+            }
+          }
+
+          lines.push('', 'Open `lighthouse-report.html` from the workflow artifact to inspect the full report.');
+
+          const markdown = `${lines.join('\n')}\n`;
+          fs.writeFileSync('reports/recommended-fixes.md', markdown);
+          fs.appendFileSync(process.env.GITHUB_STEP_SUMMARY, markdown);
+          NODE
+
+      - name: Upload Lighthouse report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: lighthouse-report
+          path: reports/
+          retention-days: 14
+
+      - name: Stop application
+        if: ${{ always() }}
+        run: docker compose down --volumes

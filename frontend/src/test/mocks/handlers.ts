@@ -46,17 +46,43 @@ function buildAvailability(eventTypeId: string, durationMinutes: number) {
 
 const ADMIN = { Authorization: `Bearer test-token` }
 
-export const sampleBooking = {
-  id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
-  eventTypeId: introType.id,
-  eventTypeName: introType.name,
-  startAt: `${dateStr(0)}T09:00:00${OFFSET}`,
-  endAt: `${dateStr(0)}T09:30:00${OFFSET}`,
-  name: 'Иван Гость',
-  meetingLink: 'https://meet.example.com/intro',
-  description: 'Обсудить проект',
-  createdAt: new Date().toISOString(),
-}
+export const sampleBookings = [
+  {
+    id: 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa',
+    eventTypeId: introType.id,
+    eventTypeName: introType.name,
+    startAt: `${dateStr(0)}T09:00:00${OFFSET}`,
+    endAt: `${dateStr(0)}T09:30:00${OFFSET}`,
+    name: 'Иван Гость',
+    meetingLink: 'https://meet.example.com/intro',
+    description: 'Обсудить проект',
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb',
+    eventTypeId: deepType.id,
+    eventTypeName: deepType.name,
+    startAt: `${dateStr(2)}T10:00:00${OFFSET}`,
+    endAt: `${dateStr(2)}T11:00:00${OFFSET}`,
+    name: 'Пётр Клиент',
+    meetingLink: 'https://meet.example.com/deep',
+    description: null,
+    createdAt: new Date().toISOString(),
+  },
+  {
+    id: 'cccccccc-cccc-cccc-cccc-cccccccccccc',
+    eventTypeId: introType.id,
+    eventTypeName: introType.name,
+    startAt: `${dateStr(4)}T14:00:00${OFFSET}`,
+    endAt: `${dateStr(4)}T14:30:00${OFFSET}`,
+    name: 'Мария Заказчик',
+    meetingLink: 'https://meet.example.com/intro2',
+    description: 'Пилотный проект',
+    createdAt: new Date().toISOString(),
+  },
+]
+
+export const sampleBooking = sampleBookings[0]
 
 export const handlers = [
   http.get('/api/v1/config', () => HttpResponse.json(baseConfig)),
@@ -115,7 +141,7 @@ export const handlers = [
     if (request.headers.get('Authorization') !== ADMIN.Authorization) {
       return HttpResponse.json({ status: 401, errorCode: 'UNAUTHORIZED' }, { status: 401 })
     }
-    return HttpResponse.json([sampleBooking])
+    return HttpResponse.json(sampleBookings)
   }),
 
   http.delete('/api/v1/admin/bookings/:id', ({ request }) => {

@@ -132,7 +132,7 @@ export function AdminPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-4xl mx-auto p-4">
+      <div className="max-w-7xl mx-auto p-4">
         <header className="mb-6 flex justify-between items-start gap-4">
           <div>
             <h1 className="text-2xl font-bold mb-1">Панель владельца</h1>
@@ -183,50 +183,52 @@ export function AdminPage() {
           )}
         </section>
 
-        <section className="mb-8">
-          <h2 className="text-xl font-bold mb-3">Календарь встреч</h2>
-          <AdminBookingCalendar
-            bookings={bookings}
-            selectedDate={selectedDate}
-            onSelectDate={(date) => setSelectedDate((prev) => (prev === date ? null : date))}
-            ownerTimeZone={config.ownerTimeZone}
-            horizonDays={config.horizonDays}
-          />
-        </section>
-
-        <section>
-          <div className="flex items-baseline gap-3 mb-3">
-            <h2 className="text-xl font-bold">
-              {selectedDate ? `Встречи за ${selectedDate}` : 'Предстоящие встречи'}
-            </h2>
-            {selectedDate && (
-              <button
-                type="button"
-                onClick={() => setSelectedDate(null)}
-                className="text-sm text-blue-600 hover:underline"
-              >
-                Показать все
-              </button>
-            )}
-          </div>
-          {selectedDate ? (
-            <BookingsList
-              bookings={bookings.filter(
-                (b) =>
-                  formatInTimeZone(new Date(b.startAt), config.ownerTimeZone, 'yyyy-MM-dd') ===
-                  selectedDate,
-              )}
-              ownerTimeZone={config.ownerTimeZone}
-              onCancel={handleCancel}
-            />
-          ) : (
-            <BookingsList
+        <div className="grid gap-8 lg:grid-cols-[minmax(0,2fr)_minmax(20rem,1fr)] lg:items-start">
+          <section aria-label="Календарь встреч">
+            <h2 className="text-xl font-bold mb-3">Календарь встреч</h2>
+            <AdminBookingCalendar
               bookings={bookings}
+              selectedDate={selectedDate}
+              onSelectDate={(date) => setSelectedDate((prev) => (prev === date ? null : date))}
               ownerTimeZone={config.ownerTimeZone}
-              onCancel={handleCancel}
+              horizonDays={config.horizonDays}
             />
-          )}
-        </section>
+          </section>
+
+          <section>
+            <div className="flex items-baseline gap-3 mb-3">
+              <h2 className="text-xl font-bold">
+                {selectedDate ? `Встречи за ${selectedDate}` : 'Предстоящие встречи'}
+              </h2>
+              {selectedDate && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedDate(null)}
+                  className="text-sm text-blue-600 hover:underline"
+                >
+                  Показать все
+                </button>
+              )}
+            </div>
+            {selectedDate ? (
+              <BookingsList
+                bookings={bookings.filter(
+                  (b) =>
+                    formatInTimeZone(new Date(b.startAt), config.ownerTimeZone, 'yyyy-MM-dd') ===
+                    selectedDate,
+                )}
+                ownerTimeZone={config.ownerTimeZone}
+                onCancel={handleCancel}
+              />
+            ) : (
+              <BookingsList
+                bookings={bookings}
+                ownerTimeZone={config.ownerTimeZone}
+                onCancel={handleCancel}
+              />
+            )}
+          </section>
+        </div>
       </div>
 
       {toast && <Toast message={toast} onDismiss={() => setToast(null)} />}

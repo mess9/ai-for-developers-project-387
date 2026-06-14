@@ -44,7 +44,7 @@ export function AdminBookingCalendar({
   })
 
   return (
-    <div className="flex flex-col md:flex-row gap-6 mb-6">
+    <div className="flex flex-col lg:flex-row gap-6">
       {months.map((monthDate) => (
         <MonthGrid
           key={format(monthDate, 'yyyy-MM')}
@@ -103,6 +103,7 @@ function MonthGrid({monthDate, bookingsByDate, windowDates, selectedDate, onSele
               onClick={() => clickable && onSelectDate(dateStr)}
               disabled={!clickable}
               aria-pressed={isSelected}
+              aria-label={clickable ? `${dateStr}, встреч: ${count}` : dateStr}
               className={[
                 'h-12 rounded border text-sm transition relative',
                 isSelected
@@ -115,8 +116,15 @@ function MonthGrid({monthDate, bookingsByDate, windowDates, selectedDate, onSele
               ].join(' ')}
             >
               {format(date, 'd')}
-              {clickable && !isSelected && (
-                <span className="absolute bottom-1 left-1/2 -translate-x-1/2 min-w-[1.25rem] h-5 bg-amber-500 rounded-full text-white text-[10px] leading-5 text-center px-1">
+              {clickable && (
+                <span
+                  aria-hidden="true"
+                  data-testid="booking-count-badge"
+                  className={[
+                    'absolute right-1 top-1/2 -translate-y-1/2 min-w-[1.25rem] h-5 rounded-full text-white text-[10px] leading-5 text-center px-1',
+                    isSelected ? 'bg-blue-600' : 'bg-amber-500',
+                  ].join(' ')}
+                >
                   {count}
                 </span>
               )}
